@@ -29,7 +29,17 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      'prettier/prettier': 'off',
+      'prettier/prettier': 'off'
+    },
+  },
+  // NestJS decorators can trigger false positives with
+  // @typescript-eslint/no-unsafe-call.
+  {
+    files: ['src/**/*.controller.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
 );
