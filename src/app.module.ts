@@ -6,13 +6,15 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import databaseConfig from './config/database.config';
 import appConfig from './config/app.config';
+import { UsersModule } from './users/users.module';
+import authConfig from './config/auth.config';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    HealthModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig],
+      load: [appConfig, databaseConfig, authConfig],
     }),
 
     MongooseModule.forRootAsync({
@@ -28,6 +30,9 @@ import appConfig from './config/app.config';
         limit: 100,
       },
     ]),
+    HealthModule,
+    UsersModule,
+    AuthModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}

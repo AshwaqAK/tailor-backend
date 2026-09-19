@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -15,6 +16,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   app.use(helmet());
+  app.use(cookieParser());
 
   app.enableCors({
     origin: configService.get<string>('app.corsOrigin'),
@@ -38,9 +40,11 @@ async function bootstrap() {
   await app.listen(port);
 }
 
-bootstrap().then(() => {
-  console.log(`Server is running on port ${process.env.PORT || 3000}`);
-}).catch((error) => {
-  console.error('Error starting the server:', error);
-  process.exit(1);
-});
+bootstrap()
+  .then(() => {
+    console.log(`Server is running on port ${process.env.PORT || 3000}`);
+  })
+  .catch((error) => {
+    console.error('Error starting the server:', error);
+    process.exit(1);
+  });
