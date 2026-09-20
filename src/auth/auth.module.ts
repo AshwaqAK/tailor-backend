@@ -11,4 +11,4 @@ import { AuthTokenModule } from './auth-token.module';
   providers: [AuthService],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

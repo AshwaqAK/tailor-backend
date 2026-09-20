@@ -9,6 +9,12 @@ export type CounterDocument = Counter & {
 })
 export class Counter {
   @Prop({
+    type: String,
+    required: true,
+  })
+  _id!: string;
+
+  @Prop({
     required: true,
     default: 0,
   })

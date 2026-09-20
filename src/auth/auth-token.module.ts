@@ -9,4 +9,4 @@ import { AuthTokenService } from './auth-token.service';
   providers: [AuthTokenService, AccessTokenGuard],
   exports: [AuthTokenService, AccessTokenGuard],
 })
-export class AuthTokenModule { }
+export class AuthTokenModule {}

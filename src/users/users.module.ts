@@ -19,10 +19,10 @@ import { AuthTokenModule } from '../auth/auth-token.module';
         schema: CounterSchema,
       },
     ]),
-    AuthTokenModule
+    AuthTokenModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],
 })
-export class UsersModule { }
+export class UsersModule {}
