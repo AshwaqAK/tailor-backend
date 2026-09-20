@@ -16,24 +16,16 @@ async function seed() {
     const configService = app.get(ConfigService);
 
     const email = configService.getOrThrow<string>('SEED_ADMIN_EMAIL');
-    const password = configService.getOrThrow<string>(
-      'SEED_ADMIN_PASSWORD',
-    );
+    const password = configService.getOrThrow<string>('SEED_ADMIN_PASSWORD');
     const name = configService.getOrThrow<string>('SEED_ADMIN_NAME');
 
-    const userModel = app.get<Model<UserDocument>>(
-      getModelToken(User.name),
-    );
+    const userModel = app.get<Model<UserDocument>>(getModelToken(User.name));
 
-    const counterModel = app.get<Model<CounterDocument>>(
-      getModelToken(Counter.name),
-    );
+    const counterModel = app.get<Model<CounterDocument>>(getModelToken(Counter.name));
 
     const normalizedEmail = email.toLowerCase();
 
-    const existingUser = await userModel
-      .findOne({ email: normalizedEmail })
-      .exec();
+    const existingUser = await userModel.findOne({ email: normalizedEmail }).exec();
 
     if (existingUser) {
       console.log(`Admin user already exists: ${existingUser.email}`);
