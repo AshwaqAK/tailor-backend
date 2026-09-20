@@ -17,7 +17,7 @@ export class CustomersService {
 
     @InjectModel(CustomerCounter.name)
     private readonly customerCounterModel: Model<CustomerCounterDocument>,
-  ) { }
+  ) {}
 
   async createCustomer(
     createCustomerDto: CreateCustomerDto,
@@ -53,8 +53,8 @@ export class CustomersService {
 
       return this.toCustomerResponse(customer);
     } catch (error) {
-      console.log(error)
-      throw error
+      console.log(error);
+      throw error;
     }
   }
 

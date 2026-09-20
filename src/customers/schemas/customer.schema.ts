@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 
 import { Gender } from '../enums/gender.enum';
 
@@ -76,7 +76,7 @@ export class Customer {
     required: true,
     index: true,
   })
-  createdBy!: string
+  createdBy!: string;
 
   @Prop({
     type: String,
@@ -84,7 +84,7 @@ export class Customer {
     required: true,
     index: true,
   })
-  updatedBy!: string
+  updatedBy!: string;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);
