@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
-import { Model } from 'mongoose';
+import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Counter, CounterDocument } from './schemas/counter.schema';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -14,6 +14,9 @@ export class UsersService {
   private readonly passwordSaltRounds = 12;
 
   constructor(
+    @InjectConnection()
+    private readonly connection: Connection,
+
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Counter.name)
@@ -29,23 +32,37 @@ export class UsersService {
       throw new ConflictException('Email already exists');
     }
 
-    const userId = await this.generateUserId();
-
     const passwordHash = await bcrypt.hash(createUserDto.password, this.passwordSaltRounds);
+    const session = await this.connection.startSession();
 
-    const user = new this.userModel({
-      userId,
-      name: createUserDto.name,
-      email,
-      phone: createUserDto.phone,
-      passwordHash,
-      role: createUserDto.role,
-      isActive: true,
-    });
+    try {
+      session.startTransaction();
 
-    const savedUser = await user.save();
+      const userId = await this.generateUserId(session);
 
-    return this.toUserResponse(savedUser);
+      const user = new this.userModel({
+        userId,
+        name: createUserDto.name,
+        email,
+        phone: createUserDto.phone,
+        passwordHash,
+        role: createUserDto.role,
+        isActive: true,
+      });
+
+      await user.save({ session });
+      await session.commitTransaction();
+
+      return this.toUserResponse(user);
+    } catch (error) {
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
   async findById(id: string): Promise<UserDocument> {
@@ -143,7 +160,7 @@ export class UsersService {
     };
   }
 
-  private async generateUserId(): Promise<string> {
+  private async generateUserId(session: ClientSession): Promise<string> {
     const counter = await this.counterModel
       .findOneAndUpdate(
         { _id: 'user' },
@@ -152,6 +169,7 @@ export class UsersService {
           upsert: true,
           new: true,
           setDefaultsOnInsert: true,
+          session,
         },
       )
       .exec();

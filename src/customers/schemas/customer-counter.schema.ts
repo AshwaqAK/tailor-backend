@@ -1,13 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-export type CounterDocument = Counter & {
+export type CustomerCounterDocument = CustomerCounter & {
   _id: string;
 };
 
 @Schema({
   versionKey: false,
 })
-export class Counter {
+export class CustomerCounter {
   @Prop({
     type: String,
     required: true,
@@ -21,4 +21,4 @@ export class Counter {
   sequence!: number;
 }
 
-export const CounterSchema = SchemaFactory.createForClass(Counter);
+export const CustomerCounterSchema = SchemaFactory.createForClass(CustomerCounter);

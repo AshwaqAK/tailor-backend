@@ -9,6 +9,7 @@ import appConfig from './config/app.config';
 import { UsersModule } from './users/users.module';
 import authConfig from './config/auth.config';
 import { AuthModule } from './auth/auth.module';
+import { CustomersModule } from './customers/customers.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuthModule } from './auth/auth.module';
     HealthModule,
     UsersModule,
     AuthModule,
+    CustomersModule,
   ],
 })
 export class AppModule {}
