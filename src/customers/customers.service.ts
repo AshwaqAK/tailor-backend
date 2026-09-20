@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { CustomerCounter, CustomerCounterDocument } from './schemas/customer-counter.schema';
@@ -12,6 +12,9 @@ import { CustomerResponse } from './types/customer-response.type';
 @Injectable()
 export class CustomersService {
   constructor(
+    @InjectConnection()
+    private readonly connection: Connection,
+
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
 
@@ -23,38 +26,50 @@ export class CustomersService {
     createCustomerDto: CreateCustomerDto,
     userId: string,
   ): Promise<CustomerResponse> {
+    const normalizedPhone = this.normalizeIndianPhone(createCustomerDto.phone);
+
+    const existingCustomer = await this.customerModel
+      .findOne({
+        phone: normalizedPhone,
+        isActive: true,
+      })
+      .lean()
+      .exec();
+
+    if (existingCustomer) {
+      throw new ConflictException('An active customer with this phone number already exists');
+    }
+
+    const session = await this.connection.startSession();
+
     try {
-      const normalizedPhone = this.normalizeIndianPhone(createCustomerDto.phone);
+      session.startTransaction();
 
-      const existingCustomer = await this.customerModel
-        .findOne({
-          phone: normalizedPhone,
-          isActive: true,
-        })
-        .lean()
-        .exec();
+      const customerId = await this.generateCustomerId(session);
 
-      if (existingCustomer) {
-        throw new ConflictException('An active customer with this phone number already exists');
-      }
-
-      const customerId = await this.generateCustomerId();
-
-      const customer = await this.customerModel.create({
+      const customer = new this.customerModel({
         ...createCustomerDto,
         phone: normalizedPhone,
         alternatePhone: createCustomerDto.alternatePhone
           ? this.normalizeIndianPhone(createCustomerDto.alternatePhone)
           : undefined,
         customerId,
-        createdBy: userId,
+        createdBy: new Types.ObjectId(userId),
         updatedBy: userId,
       });
 
+      await customer.save({ session });
+      await session.commitTransaction();
+
       return this.toCustomerResponse(customer);
     } catch (error) {
-      console.log(error);
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+
       throw error;
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -165,7 +180,7 @@ export class CustomersService {
   ): Promise<CustomerResponse> {
     const updateData: Record<string, unknown> = {
       ...updateCustomerDto,
-      updatedBy: new Types.ObjectId(userId),
+      updatedBy: userId,
     };
 
     if (updateCustomerDto.phone) {
@@ -211,7 +226,7 @@ export class CustomersService {
         id,
         {
           isActive: false,
-          updatedBy: new Types.ObjectId(userId),
+          updatedBy: userId,
         },
         {
           new: true,
@@ -227,7 +242,7 @@ export class CustomersService {
     return this.toCustomerResponse(customer);
   }
 
-  private async generateCustomerId(): Promise<string> {
+  private async generateCustomerId(session: ClientSession): Promise<string> {
     const counter = await this.customerCounterModel
       .findOneAndUpdate(
         { _id: 'customer' },
@@ -236,6 +251,7 @@ export class CustomersService {
           new: true,
           upsert: true,
           setDefaultsOnInsert: true,
+          session,
         },
       )
       .exec();

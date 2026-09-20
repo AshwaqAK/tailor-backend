@@ -4,7 +4,7 @@ import { Observable, map } from 'rxjs';
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, { success: boolean; data: T }> {
   intercept(
-    context: ExecutionContext,
+    _context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<{ success: boolean; data: T }> {
     return next.handle().pipe(
