@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 
 import { ClothingType } from '../enums/clothing-type.enum';
 import { FitPreference } from '../enums/fit-preference.enum';
@@ -15,11 +15,12 @@ export type MeasurementDocument = HydratedDocument<Measurement> & {
 })
 export class Measurement {
   @Prop({
-    type: SchemaTypes.ObjectId,
+    type: String,
     ref: 'Customer',
     required: true,
+    trim: true,
   })
-  customerId!: Types.ObjectId;
+  customerId!: string;
 
   @Prop({
     type: String,
@@ -59,11 +60,12 @@ export class Measurement {
   measuredAt!: Date;
 
   @Prop({
-    type: SchemaTypes.ObjectId,
+    type: String,
     ref: 'User',
     required: true,
+    trim: true,
   })
-  createdBy!: Types.ObjectId;
+  createdBy!: string;
 }
 
 export const MeasurementSchema = SchemaFactory.createForClass(Measurement);

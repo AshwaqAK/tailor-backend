@@ -11,6 +11,7 @@ import authConfig from './config/auth.config';
 import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { MeasurementsModule } from './measurements/measurements.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { MeasurementsModule } from './measurements/measurements.module';
     AuthModule,
     CustomersModule,
     MeasurementsModule,
+    OrdersModule,
   ],
 })
 export class AppModule {}

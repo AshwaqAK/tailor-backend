@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { CustomerCounter, CustomerCounterDocument } from './schemas/customer-counter.schema';
@@ -54,7 +54,7 @@ export class CustomersService {
           ? this.normalizeIndianPhone(createCustomerDto.alternatePhone)
           : undefined,
         customerId,
-        createdBy: new Types.ObjectId(userId),
+        createdBy: userId,
         updatedBy: userId,
       });
 
