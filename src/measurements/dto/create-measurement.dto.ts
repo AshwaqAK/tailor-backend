@@ -3,7 +3,7 @@ import {
   IsDate,
   IsEnum,
   IsInt,
-  IsMongoId,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -17,7 +17,8 @@ import { FitPreference } from '../enums/fit-preference.enum';
 import { MeasurementValuesConstraint } from './measurement-values.validator';
 
 export class CreateMeasurementDto {
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
   customerId!: string;
 
   @IsEnum(ClothingType)

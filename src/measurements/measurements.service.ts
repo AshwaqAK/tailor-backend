@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { CreateMeasurementDto } from './dto/create-measurement.dto';
@@ -41,14 +41,14 @@ export class MeasurementsService {
         .exec();
 
       const measurement = new this.measurementModel({
-        customerId: new Types.ObjectId(createMeasurementDto.customerId),
+        customerId: createMeasurementDto.customerId,
         clothingType: createMeasurementDto.clothingType,
         version: (latestMeasurement?.version ?? 0) + 1,
         measurements: createMeasurementDto.measurements,
         fitPreference: createMeasurementDto.fitPreference,
         notes: createMeasurementDto.notes,
         measuredAt: createMeasurementDto.measuredAt,
-        createdBy: new Types.ObjectId(userId),
+        createdBy: userId,
       });
 
       return await measurement.save();
@@ -121,11 +121,7 @@ export class MeasurementsService {
   }
 
   private async ensureCustomerExists(customerId: string): Promise<void> {
-    if (!Types.ObjectId.isValid(customerId)) {
-      throw new NotFoundException('Customer not found');
-    }
-
-    const customerExists = await this.customerModel.exists({ _id: customerId });
+    const customerExists = await this.customerModel.exists({ customerId });
 
     if (!customerExists) {
       throw new NotFoundException('Customer not found');

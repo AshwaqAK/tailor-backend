@@ -3,7 +3,7 @@ import {
   IsDate,
   IsEnum,
   IsInt,
-  IsMongoId,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -18,7 +18,8 @@ import { MeasurementValuesConstraint } from './measurement-values.validator';
 
 export class UpdateMeasurementDto {
   @IsOptional()
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
   customerId?: string;
 
   @IsOptional()
