@@ -1,0 +1,7 @@
+export enum AppointmentType {
+  CONSULTATION = 'CONSULTATION',
+  MEASUREMENT = 'MEASUREMENT',
+  FITTING = 'FITTING',
+  TRIAL = 'TRIAL',
+  PICKUP = 'PICKUP',
+}
