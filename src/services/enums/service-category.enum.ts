@@ -1,0 +1,7 @@
+export enum ServiceCategory {
+  STITCHING = 'STITCHING',
+  ALTERATION = 'ALTERATION',
+  CUSTOM_TAILORING = 'CUSTOM_TAILORING',
+  REPAIR = 'REPAIR',
+  OTHER = 'OTHER',
+}

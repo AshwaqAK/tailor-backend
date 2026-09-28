@@ -8,6 +8,7 @@ import { Fabric } from '../../fabrics/schemas/fabric.schema';
 import { ClothingType } from '../../measurements/enums/clothing-type.enum';
 import { FitPreference } from '../../measurements/enums/fit-preference.enum';
 import { Measurement } from '../../measurements/schemas/measurement.schema';
+import { TailoringService } from '../../services/schemas/tailoring-service.schema';
 
 @Schema({
   _id: false,
@@ -127,6 +128,50 @@ export class FabricSnapshot {
 
 export const FabricSnapshotSchema = SchemaFactory.createForClass(FabricSnapshot);
 
+@Schema({
+  _id: false,
+  versionKey: false,
+})
+export class ServiceSnapshot {
+  @Prop({
+    type: String,
+    ref: TailoringService.name,
+    required: true,
+    trim: true,
+    match: /^SRV-\d{6}$/,
+  })
+  serviceId!: string;
+
+  @Prop({
+    required: true,
+    trim: true,
+  })
+  name!: string;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 0,
+  })
+  price!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 1,
+  })
+  quantity!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 0,
+  })
+  lineAmount!: number;
+}
+
+export const ServiceSnapshotSchema = SchemaFactory.createForClass(ServiceSnapshot);
+
 export type OrderItemDocument = HydratedDocument<OrderItem> & {
   createdAt: Date;
   updatedAt: Date;
@@ -182,6 +227,11 @@ export class OrderItem {
     type: FabricSnapshotSchema,
   })
   fabricSnapshot?: FabricSnapshot;
+
+  @Prop({
+    type: ServiceSnapshotSchema,
+  })
+  serviceSnapshot?: ServiceSnapshot;
 
   @Prop({
     trim: true,

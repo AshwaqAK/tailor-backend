@@ -28,6 +28,13 @@ export class CreateOrderItemDto {
   @IsMongoId()
   measurementId!: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^SRV-\d{6}$/, {
+    message: 'serviceId must be a valid tailoring service ID',
+  })
+  serviceId?: string;
+
   @ValidateIf(
     (item: CreateOrderItemDto) =>
       item.fabricId !== undefined || item.fabricQuantity !== undefined,

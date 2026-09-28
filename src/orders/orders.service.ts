@@ -13,6 +13,8 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { FabricsService } from '../fabrics/fabrics.service';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { Measurement, MeasurementDocument } from '../measurements/schemas/measurement.schema';
+import { ServicesService } from '../services/services.service';
+import type { TailoringServiceDocument } from '../services/schemas/tailoring-service.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from './enums/order-status.enum';
@@ -57,6 +59,7 @@ export class OrdersService {
     private readonly counterModel: Model<CounterDocument>,
 
     private readonly fabricsService: FabricsService,
+    private readonly servicesService: ServicesService,
   ) {}
 
   async createOrder(createOrderDto: CreateOrderDto, userId: string): Promise<CreateOrderResult> {
@@ -69,6 +72,12 @@ export class OrdersService {
         throw new BadRequestException('At least one order item is required');
       }
 
+      for (const item of createOrderDto.items) {
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw new BadRequestException('Order service quantity must be a positive integer');
+        }
+      }
+
       const customerExists = await this.customerModel
         .exists({ customerId: createOrderDto.customerId })
         .session(session)
@@ -77,6 +86,17 @@ export class OrdersService {
       if (!customerExists) {
         throw new NotFoundException('Customer not found');
       }
+
+      const serviceIds = createOrderDto.items.flatMap((item) =>
+        item.serviceId ? [item.serviceId] : [],
+      );
+      const tailoringServices = await this.servicesService.findActiveByIds(serviceIds, session);
+      const servicesById = new Map<string, TailoringServiceDocument>(
+        tailoringServices.map((tailoringService) => [
+          tailoringService.serviceId,
+          tailoringService,
+        ]),
+      );
 
       const orderId = await this.generateOrderId(session);
       const fabricQuantities = new Map<string, number>();
@@ -138,6 +158,12 @@ export class OrdersService {
           );
         }
 
+        const tailoringService = itemDto.serviceId
+          ? servicesById.get(itemDto.serviceId)
+          : undefined;
+        const serviceLineAmount = tailoringService
+          ? this.calculateServiceLineAmount(tailoringService.price, itemDto.quantity)
+          : undefined;
         const fabric = itemDto.fabricId ? fabricsById.get(itemDto.fabricId) : undefined;
         const measurementValues = new Map<string, number>(measurement.measurements);
         const orderItem = new this.orderItemModel({
@@ -168,6 +194,15 @@ export class OrdersService {
                   quantityUsed: itemDto.fabricQuantity,
                 }
               : undefined,
+          serviceSnapshot: tailoringService
+            ? {
+                serviceId: tailoringService.serviceId,
+                name: tailoringService.name,
+                price: tailoringService.price,
+                quantity: itemDto.quantity,
+                lineAmount: serviceLineAmount,
+              }
+            : undefined,
           notes: itemDto.notes,
         });
 
@@ -276,6 +311,24 @@ export class OrdersService {
     order.updatedBy = userId;
 
     return order.save();
+  }
+
+  private calculateServiceLineAmount(price: number, quantity: number): number {
+    if (!Number.isFinite(price) || price < 0) {
+      throw new BadRequestException('Tailoring service price must be a non-negative number');
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException('Order service quantity must be a positive integer');
+    }
+
+    const lineAmount = price * quantity;
+
+    if (!Number.isFinite(lineAmount) || lineAmount < 0) {
+      throw new BadRequestException('Tailoring service line amount must be non-negative');
+    }
+
+    return Number(lineAmount.toFixed(2));
   }
 
   private async generateOrderId(session: ClientSession): Promise<string> {
