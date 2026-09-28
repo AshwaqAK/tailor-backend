@@ -10,6 +10,8 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
+import { FabricsService } from '../fabrics/fabrics.service';
+import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { Measurement, MeasurementDocument } from '../measurements/schemas/measurement.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -53,6 +55,8 @@ export class OrdersService {
 
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
+
+    private readonly fabricsService: FabricsService,
   ) {}
 
   async createOrder(createOrderDto: CreateOrderDto, userId: string): Promise<CreateOrderResult> {
@@ -75,6 +79,43 @@ export class OrdersService {
       }
 
       const orderId = await this.generateOrderId(session);
+      const fabricQuantities = new Map<string, number>();
+
+      for (const item of createOrderDto.items) {
+        const hasFabricId = item.fabricId !== undefined;
+        const hasFabricQuantity = item.fabricQuantity !== undefined;
+
+        if (hasFabricId !== hasFabricQuantity) {
+          throw new BadRequestException(
+            'fabricId and fabricQuantity must be provided together',
+          );
+        }
+
+        if (!item.fabricId || item.fabricQuantity === undefined) {
+          continue;
+        }
+
+        if (!Number.isFinite(item.fabricQuantity) || item.fabricQuantity <= 0) {
+          throw new BadRequestException('Fabric quantity must be positive');
+        }
+
+        const currentQuantity = fabricQuantities.get(item.fabricId) ?? 0;
+        fabricQuantities.set(item.fabricId, currentQuantity + item.fabricQuantity);
+      }
+
+      const fabricsById = new Map<string, FabricDocument>();
+
+      for (const [fabricId, quantity] of fabricQuantities) {
+        const fabric = await this.fabricsService.deductStock(
+          fabricId,
+          quantity,
+          orderId,
+          userId,
+          session,
+        );
+        fabricsById.set(fabricId, fabric);
+      }
+
       const orderItems: OrderItemDocument[] = [];
 
       for (const itemDto of createOrderDto.items) {
@@ -97,6 +138,7 @@ export class OrdersService {
           );
         }
 
+        const fabric = itemDto.fabricId ? fabricsById.get(itemDto.fabricId) : undefined;
         const measurementValues = new Map<string, number>(measurement.measurements);
         const orderItem = new this.orderItemModel({
           orderId,
@@ -114,6 +156,18 @@ export class OrdersService {
             notes: measurement.notes,
             measuredAt: new Date(measurement.measuredAt),
           },
+          fabricSnapshot:
+            fabric && itemDto.fabricQuantity !== undefined
+              ? {
+                  fabricId: fabric.fabricId,
+                  name: fabric.name,
+                  type: fabric.type,
+                  color: fabric.color,
+                  unit: fabric.unit,
+                  pricePerUnit: fabric.pricePerUnit,
+                  quantityUsed: itemDto.fabricQuantity,
+                }
+              : undefined,
           notes: itemDto.notes,
         });
 

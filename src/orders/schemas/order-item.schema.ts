@@ -2,6 +2,9 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 
 import { Customer } from '../../customers/schemas/customer.schema';
+import { FabricType } from '../../fabrics/enums/fabric-type.enum';
+import { QuantityUnit } from '../../fabrics/enums/quantity-unit.enum';
+import { Fabric } from '../../fabrics/schemas/fabric.schema';
 import { ClothingType } from '../../measurements/enums/clothing-type.enum';
 import { FitPreference } from '../../measurements/enums/fit-preference.enum';
 import { Measurement } from '../../measurements/schemas/measurement.schema';
@@ -67,6 +70,63 @@ export class MeasurementSnapshot {
 
 export const MeasurementSnapshotSchema = SchemaFactory.createForClass(MeasurementSnapshot);
 
+@Schema({
+  _id: false,
+  versionKey: false,
+})
+export class FabricSnapshot {
+  @Prop({
+    type: String,
+    ref: Fabric.name,
+    required: true,
+    trim: true,
+    match: /^FAB-\d{6}$/,
+  })
+  fabricId!: string;
+
+  @Prop({
+    required: true,
+    trim: true,
+  })
+  name!: string;
+
+  @Prop({
+    type: String,
+    enum: FabricType,
+    required: true,
+  })
+  type!: FabricType;
+
+  @Prop({
+    required: true,
+    trim: true,
+  })
+  color!: string;
+
+  @Prop({
+    type: String,
+    enum: QuantityUnit,
+    required: true,
+  })
+  unit!: QuantityUnit;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 0,
+  })
+  pricePerUnit!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: Number.MIN_VALUE,
+  })
+  quantityUsed!: number;
+}
+
+export const FabricSnapshotSchema = SchemaFactory.createForClass(FabricSnapshot);
+
 export type OrderItemDocument = HydratedDocument<OrderItem> & {
   createdAt: Date;
   updatedAt: Date;
@@ -117,6 +177,11 @@ export class OrderItem {
     type: MeasurementSnapshotSchema,
   })
   measurementSnapshot?: MeasurementSnapshot;
+
+  @Prop({
+    type: FabricSnapshotSchema,
+  })
+  fabricSnapshot?: FabricSnapshot;
 
   @Prop({
     trim: true,
