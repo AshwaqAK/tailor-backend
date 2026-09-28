@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { MeasurementsModule } from './measurements/measurements.module';
 import { OrdersModule } from './orders/orders.module';
+import { ServicesModule } from './services/services.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { FabricsModule } from './fabrics/fabrics.module';
 
@@ -41,6 +42,7 @@ import { FabricsModule } from './fabrics/fabrics.module';
     CustomersModule,
     MeasurementsModule,
     OrdersModule,
+    ServicesModule,
     AppointmentsModule,
     FabricsModule,
   ],
