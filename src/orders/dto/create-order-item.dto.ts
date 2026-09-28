@@ -1,4 +1,15 @@
-import { IsEnum, IsInt, IsMongoId, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Matches,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
 import { ClothingType } from '../../measurements/enums/clothing-type.enum';
 
@@ -16,6 +27,24 @@ export class CreateOrderItemDto {
 
   @IsMongoId()
   measurementId!: string;
+
+  @ValidateIf(
+    (item: CreateOrderItemDto) =>
+      item.fabricId !== undefined || item.fabricQuantity !== undefined,
+  )
+  @IsString()
+  @Matches(/^FAB-\d{6}$/, {
+    message: 'fabricId must be a valid fabric ID',
+  })
+  fabricId?: string;
+
+  @ValidateIf(
+    (item: CreateOrderItemDto) =>
+      item.fabricId !== undefined || item.fabricQuantity !== undefined,
+  )
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsPositive()
+  fabricQuantity?: number;
 
   @IsOptional()
   @IsString()
