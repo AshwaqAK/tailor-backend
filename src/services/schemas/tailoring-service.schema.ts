@@ -73,3 +73,5 @@ export class TailoringService {
 }
 
 export const TailoringServiceSchema = SchemaFactory.createForClass(TailoringService);
+
+TailoringServiceSchema.index({ createdAt: 1, isActive: 1, category: 1 });

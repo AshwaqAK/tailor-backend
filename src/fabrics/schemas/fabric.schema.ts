@@ -76,7 +76,6 @@ export class Fabric {
   @Prop({
     required: true,
     default: true,
-    index: true,
   })
   isActive!: boolean;
 
@@ -105,3 +104,6 @@ export class Fabric {
 }
 
 export const FabricSchema = SchemaFactory.createForClass(Fabric);
+
+FabricSchema.index({ createdAt: 1, isActive: 1 });
+FabricSchema.index({ isActive: 1, quantity: 1 });
