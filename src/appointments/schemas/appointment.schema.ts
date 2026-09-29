@@ -40,7 +40,6 @@ export class Appointment {
   @Prop({
     type: Date,
     required: true,
-    index: true,
   })
   appointmentDate!: Date;
 
@@ -91,3 +90,5 @@ export class Appointment {
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
+
+AppointmentSchema.index({ appointmentDate: 1, status: 1, type: 1 });
