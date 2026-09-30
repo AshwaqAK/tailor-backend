@@ -51,6 +51,50 @@ export class Order {
   status!: OrderStatus;
 
   @Prop({
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+    validate: {
+      validator(this: Order, value: number): boolean {
+        return Number.isFinite(value) && value >= this.paidAmount;
+      },
+      message: 'Order total amount must be greater than or equal to paid amount',
+    },
+  })
+  totalAmount!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+    validate: {
+      validator(this: Order, value: number): boolean {
+        return Number.isFinite(value) && value <= this.totalAmount;
+      },
+      message: 'Order paid amount cannot exceed total amount',
+    },
+  })
+  paidAmount!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+    validate: {
+      validator(this: Order, value: number): boolean {
+        const expectedBalance = Number((this.totalAmount - this.paidAmount).toFixed(2));
+
+        return Number.isFinite(value) && value === expectedBalance;
+      },
+      message: 'Order balance amount must equal total amount minus paid amount',
+    },
+  })
+  balanceAmount!: number;
+
+  @Prop({
     trim: true,
   })
   notes?: string;
