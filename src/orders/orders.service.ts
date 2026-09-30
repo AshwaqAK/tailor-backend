@@ -92,10 +92,7 @@ export class OrdersService {
       );
       const tailoringServices = await this.servicesService.findActiveByIds(serviceIds, session);
       const servicesById = new Map<string, TailoringServiceDocument>(
-        tailoringServices.map((tailoringService) => [
-          tailoringService.serviceId,
-          tailoringService,
-        ]),
+        tailoringServices.map((tailoringService) => [tailoringService.serviceId, tailoringService]),
       );
 
       const orderId = await this.generateOrderId(session);
@@ -106,9 +103,7 @@ export class OrdersService {
         const hasFabricQuantity = item.fabricQuantity !== undefined;
 
         if (hasFabricId !== hasFabricQuantity) {
-          throw new BadRequestException(
-            'fabricId and fabricQuantity must be provided together',
-          );
+          throw new BadRequestException('fabricId and fabricQuantity must be provided together');
         }
 
         if (!item.fabricId || item.fabricQuantity === undefined) {

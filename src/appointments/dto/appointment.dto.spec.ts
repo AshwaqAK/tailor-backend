@@ -66,9 +66,7 @@ describe('Appointment DTO validation', () => {
         }),
       ),
     ).resolves.toHaveLength(0);
-    const errors = await validate(
-      plainToInstance(UpdateAppointmentDto, { status: 'UNKNOWN' }),
-    );
+    const errors = await validate(plainToInstance(UpdateAppointmentDto, { status: 'UNKNOWN' }));
 
     expect(errors.map((error) => error.property)).toContain('status');
   });

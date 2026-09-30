@@ -5,10 +5,7 @@ import { AuthTokenModule } from '../auth/auth-token.module';
 import { Counter, CounterSchema } from '../users/schemas/counter.schema';
 import { ServicesController } from './services.controller';
 import { ServicesService } from './services.service';
-import {
-  TailoringService,
-  TailoringServiceSchema,
-} from './schemas/tailoring-service.schema';
+import { TailoringService, TailoringServiceSchema } from './schemas/tailoring-service.schema';
 
 @Module({
   imports: [

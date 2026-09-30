@@ -53,8 +53,7 @@ describe('Order DTO validation', () => {
       fabricQuantity: -2,
     });
     const errors = await validate(plainToInstance(CreateOrderDto, value));
-    const itemErrors = errors.find((error) => error.property === 'items')?.children?.[0]
-      ?.children;
+    const itemErrors = errors.find((error) => error.property === 'items')?.children?.[0]?.children;
 
     expect(itemErrors?.map((error) => error.property)).toEqual(
       expect.arrayContaining([
@@ -85,9 +84,7 @@ describe('Order DTO validation', () => {
     await expect(
       validate(plainToInstance(UpdateOrderStatusDto, { status: OrderStatus.IN_PROGRESS })),
     ).resolves.toHaveLength(0);
-    const errors = await validate(
-      plainToInstance(UpdateOrderStatusDto, { status: 'UNKNOWN' }),
-    );
+    const errors = await validate(plainToInstance(UpdateOrderStatusDto, { status: 'UNKNOWN' }));
 
     expect(errors[0]?.property).toBe('status');
   });

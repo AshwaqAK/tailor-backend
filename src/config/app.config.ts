@@ -1,9 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('app', () => {
-  const configuredLowStockThreshold = Number(
-    process.env.FABRIC_LOW_STOCK_THRESHOLD ?? '5',
-  );
+  const configuredLowStockThreshold = Number(process.env.FABRIC_LOW_STOCK_THRESHOLD ?? '5');
 
   return {
     env: process.env.NODE_ENV || 'development',

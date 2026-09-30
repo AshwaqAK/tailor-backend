@@ -45,11 +45,7 @@ describe('CustomersController', () => {
     await controller.update('customer-id', { name: 'Updated' }, user);
     await controller.deactivate('customer-id', user);
 
-    expect(updateCustomer).toHaveBeenCalledWith(
-      'customer-id',
-      { name: 'Updated' },
-      'USR-000001',
-    );
+    expect(updateCustomer).toHaveBeenCalledWith('customer-id', { name: 'Updated' }, 'USR-000001');
     expect(deactivateCustomer).toHaveBeenCalledWith('customer-id', 'USR-000001');
   });
 });

@@ -153,7 +153,6 @@ describe('ReportsService', () => {
             { _id: false, count: 2 },
           ],
           lowStock: [{ count: 3 }],
-          availableQuantity: [{ total: 45.5 }],
           availableQuantityByUnit: [
             { _id: QuantityUnit.METER, total: 40.5 },
             { _id: QuantityUnit.PIECE, total: 5 },
@@ -169,7 +168,7 @@ describe('ReportsService', () => {
       activeFabrics: 6,
       inactiveFabrics: 2,
       lowStockFabrics: { count: 3, threshold: 5 },
-      totalAvailableQuantity: 45.5,
+      totalAvailableQuantity: null,
       availableQuantityByUnit: { METER: 40.5, PIECE: 5 },
     });
     expect(configService.get).toHaveBeenCalledWith('app.fabricLowStockThreshold', 5);
@@ -177,14 +176,7 @@ describe('ReportsService', () => {
       {
         $facet: {
           activity: [{ $group: { _id: '$isActive', count: { $sum: 1 } } }],
-          lowStock: [
-            { $match: { isActive: true, quantity: { $lte: 5 } } },
-            { $count: 'count' },
-          ],
-          availableQuantity: [
-            { $match: { isActive: true } },
-            { $group: { _id: null, total: { $sum: '$quantity' } } },
-          ],
+          lowStock: [{ $match: { isActive: true, quantity: { $lte: 5 } } }, { $count: 'count' }],
           availableQuantityByUnit: [
             { $match: { isActive: true } },
             { $group: { _id: '$unit', total: { $sum: '$quantity' } } },
@@ -224,6 +216,23 @@ describe('ReportsService', () => {
         OTHER: 0,
       },
     });
+  });
+
+  it('reports a numeric total when active fabric quantity has one unit', async () => {
+    fabricModel.aggregate.mockReturnValue(
+      aggregation([
+        {
+          activity: [{ _id: true, count: 2 }],
+          lowStock: [],
+          availableQuantityByUnit: [{ _id: QuantityUnit.METER, total: 12.5 }],
+        },
+      ]),
+    );
+
+    const result = await service.getFabricReport(new ReportDateQueryDto());
+
+    expect(result.totalAvailableQuantity).toBe(12.5);
+    expect(result.availableQuantityByUnit).toEqual({ METER: 12.5, PIECE: 0 });
   });
 
   it.each([

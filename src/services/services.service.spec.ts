@@ -42,9 +42,7 @@ describe('ServicesService', () => {
     description: 'Premium garment stitching',
   });
 
-  const createServiceDocument = (
-    overrides: Partial<TailoringServiceDocument> = {},
-  ) => {
+  const createServiceDocument = (overrides: Partial<TailoringServiceDocument> = {}) => {
     const save = jest.fn();
     const tailoringService = {
       serviceId: 'SRV-000007',

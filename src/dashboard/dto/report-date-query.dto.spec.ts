@@ -13,9 +13,7 @@ describe('ReportDateQueryDto', () => {
     { fromDate: '2026-01-01', toDate: '2026-01-31' },
     { fromDate: '2026-01-01T10:00:00Z', toDate: '2026-01-01T12:00:00Z' },
   ])('accepts valid date query %#', async (value) => {
-    await expect(
-      validate(plainToInstance(ReportDateQueryDto, value)),
-    ).resolves.toHaveLength(0);
+    await expect(validate(plainToInstance(ReportDateQueryDto, value))).resolves.toHaveLength(0);
   });
 
   it.each([
@@ -23,9 +21,7 @@ describe('ReportDateQueryDto', () => {
     [undefined, '2026-13-40'],
     ['2026-01', '2026-01-31'],
   ])('rejects invalid dates from=%s to=%s', async (fromDate, toDate) => {
-    const errors = await validate(
-      plainToInstance(ReportDateQueryDto, { fromDate, toDate }),
-    );
+    const errors = await validate(plainToInstance(ReportDateQueryDto, { fromDate, toDate }));
 
     expect(errors.length).toBeGreaterThan(0);
   });
@@ -63,14 +59,10 @@ describe('ReportDateQueryDto', () => {
   });
 
   it('normalizes date-only and offset timestamps to UTC boundaries', () => {
-    expect(parseReportDate('2026-01-31')).toEqual(
-      new Date('2026-01-31T00:00:00.000Z'),
-    );
+    expect(parseReportDate('2026-01-31')).toEqual(new Date('2026-01-31T00:00:00.000Z'));
     expect(parseReportDate('2026-01-31T00:30:00+05:30')).toEqual(
       new Date('2026-01-30T19:00:00.000Z'),
     );
-    expect(parseReportDate('2026-01-31T00:30:00')).toEqual(
-      new Date('2026-01-31T00:30:00.000Z'),
-    );
+    expect(parseReportDate('2026-01-31T00:30:00')).toEqual(new Date('2026-01-31T00:30:00.000Z'));
   });
 });

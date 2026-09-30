@@ -35,10 +35,7 @@ describe('RolesGuard', () => {
     getAllAndOverride.mockReturnValue(undefined);
 
     expect(guard.canActivate(createContext())).toBe(true);
-    expect(getAllAndOverride).toHaveBeenCalledWith(ROLES_KEY, [
-      'handler',
-      'controller',
-    ]);
+    expect(getAllAndOverride).toHaveBeenCalledWith(ROLES_KEY, ['handler', 'controller']);
   });
 
   it('allows a user with a required role', () => {

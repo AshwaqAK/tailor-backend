@@ -16,18 +16,14 @@ describe('AuthTokenService', () => {
     role: Role.MANAGER,
   };
   let signAsync: Mock<(payload: unknown, options: unknown) => Promise<string>>;
-  let verifyAsync: Mock<
-    (token: string, options: unknown) => Promise<typeof payload>
-  >;
+  let verifyAsync: Mock<(token: string, options: unknown) => Promise<typeof payload>>;
   let getOrThrow: Mock<(key: string) => string>;
   let get: Mock<(key: string, defaultValue: string) => string>;
   let service: AuthTokenService;
 
   beforeEach(() => {
     signAsync = jest.fn<(payload: unknown, options: unknown) => Promise<string>>();
-    verifyAsync = jest.fn<
-      (token: string, options: unknown) => Promise<typeof payload>
-    >();
+    verifyAsync = jest.fn<(token: string, options: unknown) => Promise<typeof payload>>();
     getOrThrow = jest.fn((key: string) => `${key}-value`);
     get = jest.fn((_key: string, defaultValue: string) => defaultValue);
     service = new AuthTokenService(

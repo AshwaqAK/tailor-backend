@@ -1,9 +1,11 @@
 /// <reference types="jest" />
 
+import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
 import { CreateCustomerDto } from './create-customer.dto';
+import { CustomerQueryDto } from './customer-query.dto';
 import { UpdateCustomerDto } from './update-customer.dto';
 import { Gender } from '../enums/gender.enum';
 
@@ -55,5 +57,23 @@ describe('Customer DTO validation', () => {
     expect(errors.map((error) => error.property)).toEqual(
       expect.arrayContaining(['customerId', 'createdBy', 'isActive']),
     );
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    [true, true],
+    [false, false],
+  ])('transforms isActive query value %s to %s', async (value, expected) => {
+    const dto = plainToInstance(CustomerQueryDto, { isActive: value });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.isActive).toBe(expected);
+  });
+
+  it('rejects an invalid isActive query string', async () => {
+    const dto = plainToInstance(CustomerQueryDto, { isActive: 'yes' });
+
+    expect((await validate(dto)).map((error) => error.property)).toContain('isActive');
   });
 });

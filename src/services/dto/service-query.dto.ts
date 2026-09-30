@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 
 import { ServiceCategory } from '../enums/service-category.enum';
+import { transformBooleanQuery } from '../../common/transforms/boolean-query.transform';
 
 export class ServiceQueryDto {
   @IsOptional()
@@ -37,7 +38,7 @@ export class ServiceQueryDto {
   category?: ServiceCategory;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(transformBooleanQuery)
   @IsBoolean()
   isActive?: boolean;
 

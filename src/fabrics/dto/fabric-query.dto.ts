@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -13,6 +13,7 @@ import {
 
 import { FabricType } from '../enums/fabric-type.enum';
 import { QuantityUnit } from '../enums/quantity-unit.enum';
+import { transformBooleanQuery } from '../../common/transforms/boolean-query.transform';
 
 export class FabricQueryDto {
   @IsOptional()
@@ -47,7 +48,7 @@ export class FabricQueryDto {
   unit?: QuantityUnit;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(transformBooleanQuery)
   @IsBoolean()
   isActive?: boolean;
 

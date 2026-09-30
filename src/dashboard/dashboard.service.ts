@@ -4,10 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
 import { AppointmentStatus } from '../appointments/enums/appointment-status.enum';
-import {
-  Appointment,
-  AppointmentDocument,
-} from '../appointments/schemas/appointment.schema';
+import { Appointment, AppointmentDocument } from '../appointments/schemas/appointment.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Fabric, FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
@@ -47,10 +44,7 @@ export class DashboardService {
   async getSummary(): Promise<DashboardSummary> {
     const startOfToday = new Date();
     startOfToday.setUTCHours(0, 0, 0, 0);
-    const lowStockThreshold = this.configService.get<number>(
-      'app.fabricLowStockThreshold',
-      5,
-    );
+    const lowStockThreshold = this.configService.get<number>('app.fabricLowStockThreshold', 5);
 
     const [
       customerActivityCounts,
@@ -62,14 +56,10 @@ export class DashboardService {
       tailoringServiceActivityCounts,
     ] = await Promise.all([
       this.customerModel
-        .aggregate<GroupedCount<boolean>>([
-          { $group: { _id: '$isActive', count: { $sum: 1 } } },
-        ])
+        .aggregate<GroupedCount<boolean>>([{ $group: { _id: '$isActive', count: { $sum: 1 } } }])
         .exec(),
       this.orderModel
-        .aggregate<GroupedCount<OrderStatus>>([
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ])
+        .aggregate<GroupedCount<OrderStatus>>([{ $group: { _id: '$status', count: { $sum: 1 } } }])
         .exec(),
       this.appointmentModel
         .aggregate<GroupedCount<AppointmentStatus>>([
@@ -85,9 +75,7 @@ export class DashboardService {
         })
         .exec(),
       this.fabricModel
-        .aggregate<GroupedCount<boolean>>([
-          { $group: { _id: '$isActive', count: { $sum: 1 } } },
-        ])
+        .aggregate<GroupedCount<boolean>>([{ $group: { _id: '$isActive', count: { $sum: 1 } } }])
         .exec(),
       this.fabricModel
         .countDocuments({
@@ -96,9 +84,7 @@ export class DashboardService {
         })
         .exec(),
       this.tailoringServiceModel
-        .aggregate<GroupedCount<boolean>>([
-          { $group: { _id: '$isActive', count: { $sum: 1 } } },
-        ])
+        .aggregate<GroupedCount<boolean>>([{ $group: { _id: '$isActive', count: { $sum: 1 } } }])
         .exec(),
     ]);
 
@@ -141,10 +127,7 @@ export class DashboardService {
     }
 
     const totalCustomers = customersByActivity.active + customersByActivity.inactive;
-    const totalOrders = Object.values(ordersByStatus).reduce(
-      (total, count) => total + count,
-      0,
-    );
+    const totalOrders = Object.values(ordersByStatus).reduce((total, count) => total + count, 0);
     const totalAppointments = Object.values(appointmentsByStatus).reduce(
       (total, count) => total + count,
       0,
