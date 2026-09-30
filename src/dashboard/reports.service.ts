@@ -5,10 +5,7 @@ import { Model, PipelineStage } from 'mongoose';
 
 import { AppointmentStatus } from '../appointments/enums/appointment-status.enum';
 import { AppointmentType } from '../appointments/enums/appointment-type.enum';
-import {
-  Appointment,
-  AppointmentDocument,
-} from '../appointments/schemas/appointment.schema';
+import { Appointment, AppointmentDocument } from '../appointments/schemas/appointment.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import { Fabric, FabricDocument } from '../fabrics/schemas/fabric.schema';
@@ -19,10 +16,7 @@ import {
   TailoringService,
   TailoringServiceDocument,
 } from '../services/schemas/tailoring-service.schema';
-import {
-  parseReportDate,
-  ReportDateQueryDto,
-} from './dto/report-date-query.dto';
+import { parseReportDate, ReportDateQueryDto } from './dto/report-date-query.dto';
 import {
   AppointmentReport,
   CustomerReport,
@@ -44,7 +38,6 @@ interface AppointmentReportAggregation {
 interface FabricReportAggregation {
   activity: GroupedCount<boolean>[];
   lowStock: Array<{ count: number }>;
-  availableQuantity: Array<{ total: number }>;
   availableQuantityByUnit: Array<{ _id: QuantityUnit; total: number }>;
 }
 
@@ -113,10 +106,7 @@ export class ReportsService {
     }
 
     return {
-      totalOrders: Object.values(ordersByStatus).reduce(
-        (total, count) => total + count,
-        0,
-      ),
+      totalOrders: Object.values(ordersByStatus).reduce((total, count) => total + count, 0),
       ordersByStatus,
       orderTotals: {
         pending: ordersByStatus.DRAFT + ordersByStatus.CONFIRMED,
@@ -173,10 +163,7 @@ export class ReportsService {
   }
 
   async getFabricReport(query: ReportDateQueryDto): Promise<FabricReport> {
-    const lowStockThreshold = this.configService.get<number>(
-      'app.fabricLowStockThreshold',
-      5,
-    );
+    const lowStockThreshold = this.configService.get<number>('app.fabricLowStockThreshold', 5);
     const [aggregation] = await this.fabricModel
       .aggregate<FabricReportAggregation>([
         ...this.buildDateMatchStages('createdAt', query),
@@ -191,10 +178,6 @@ export class ReportsService {
                 },
               },
               { $count: 'count' },
-            ],
-            availableQuantity: [
-              { $match: { isActive: true } },
-              { $group: { _id: null, total: { $sum: '$quantity' } } },
             ],
             availableQuantityByUnit: [
               { $match: { isActive: true } },
@@ -214,6 +197,10 @@ export class ReportsService {
       availableQuantityByUnit[result._id] = result.total;
     }
 
+    const quantityGroups = aggregation?.availableQuantityByUnit ?? [];
+    const totalAvailableQuantity =
+      quantityGroups.length > 1 ? null : (quantityGroups[0]?.total ?? 0);
+
     return {
       totalFabrics: activity.active + activity.inactive,
       activeFabrics: activity.active,
@@ -222,7 +209,7 @@ export class ReportsService {
         count: aggregation?.lowStock[0]?.count ?? 0,
         threshold: lowStockThreshold,
       },
-      totalAvailableQuantity: aggregation?.availableQuantity[0]?.total ?? 0,
+      totalAvailableQuantity,
       availableQuantityByUnit,
     };
   }

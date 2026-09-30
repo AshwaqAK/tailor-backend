@@ -36,7 +36,7 @@ export interface FabricReport {
     count: number;
     threshold: number;
   };
-  totalAvailableQuantity: number;
+  totalAvailableQuantity: number | null;
   availableQuantityByUnit: Record<QuantityUnit, number>;
 }
 

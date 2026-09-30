@@ -6,6 +6,7 @@ import { validate } from 'class-validator';
 
 import { ServiceCategory } from '../enums/service-category.enum';
 import { CreateServiceDto } from './create-service.dto';
+import { ServiceQueryDto } from './service-query.dto';
 import { UpdateServiceDto } from './update-service.dto';
 
 describe('Tailoring service DTO validation', () => {
@@ -16,9 +17,9 @@ describe('Tailoring service DTO validation', () => {
   });
 
   it('accepts all required service fields', async () => {
-    await expect(
-      validate(plainToInstance(CreateServiceDto, validService())),
-    ).resolves.toHaveLength(0);
+    await expect(validate(plainToInstance(CreateServiceDto, validService()))).resolves.toHaveLength(
+      0,
+    );
   });
 
   it('rejects missing required fields', async () => {
@@ -80,5 +81,21 @@ describe('Tailoring service DTO validation', () => {
     expect(errors.map((error) => error.property)).toEqual(
       expect.arrayContaining(['serviceId', 'createdBy', 'updatedBy']),
     );
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+  ])('transforms isActive query string %s to %s', async (value, expected) => {
+    const dto = plainToInstance(ServiceQueryDto, { isActive: value });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.isActive).toBe(expected);
+  });
+
+  it('rejects an invalid isActive query string', async () => {
+    const dto = plainToInstance(ServiceQueryDto, { isActive: 'yes' });
+
+    expect((await validate(dto)).map((error) => error.property)).toContain('isActive');
   });
 });

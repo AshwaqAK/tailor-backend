@@ -7,6 +7,7 @@ import { validate } from 'class-validator';
 import { FabricType } from '../enums/fabric-type.enum';
 import { QuantityUnit } from '../enums/quantity-unit.enum';
 import { CreateFabricDto } from './create-fabric.dto';
+import { FabricQueryDto } from './fabric-query.dto';
 import { UpdateFabricDto } from './update-fabric.dto';
 
 describe('Fabric DTO validation', () => {
@@ -20,23 +21,16 @@ describe('Fabric DTO validation', () => {
   });
 
   it('accepts all required fabric fields', async () => {
-    await expect(
-      validate(plainToInstance(CreateFabricDto, validFabric())),
-    ).resolves.toHaveLength(0);
+    await expect(validate(plainToInstance(CreateFabricDto, validFabric()))).resolves.toHaveLength(
+      0,
+    );
   });
 
   it('rejects missing required fields', async () => {
     const errors = await validate(plainToInstance(CreateFabricDto, {}));
 
     expect(errors.map((error) => error.property)).toEqual(
-      expect.arrayContaining([
-        'name',
-        'type',
-        'color',
-        'quantity',
-        'unit',
-        'pricePerUnit',
-      ]),
+      expect.arrayContaining(['name', 'type', 'color', 'quantity', 'unit', 'pricePerUnit']),
     );
   });
 
@@ -49,9 +43,7 @@ describe('Fabric DTO validation', () => {
       }),
     );
 
-    expect(errors.map((error) => error.property)).toEqual(
-      expect.arrayContaining(['type', 'unit']),
-    );
+    expect(errors.map((error) => error.property)).toEqual(expect.arrayContaining(['type', 'unit']));
   });
 
   it('rejects negative quantity and price', async () => {
@@ -82,12 +74,7 @@ describe('Fabric DTO validation', () => {
     });
 
     expect(errors.map((error) => error.property)).toEqual(
-      expect.arrayContaining([
-        'fabricId',
-        'createdBy',
-        'updatedBy',
-        'stockDeductedOrderIds',
-      ]),
+      expect.arrayContaining(['fabricId', 'createdBy', 'updatedBy', 'stockDeductedOrderIds']),
     );
   });
 
@@ -105,12 +92,23 @@ describe('Fabric DTO validation', () => {
     });
 
     expect(errors.map((error) => error.property)).toEqual(
-      expect.arrayContaining([
-        'fabricId',
-        'createdBy',
-        'updatedBy',
-        'stockDeductedOrderIds',
-      ]),
+      expect.arrayContaining(['fabricId', 'createdBy', 'updatedBy', 'stockDeductedOrderIds']),
     );
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+  ])('transforms isActive query string %s to %s', async (value, expected) => {
+    const dto = plainToInstance(FabricQueryDto, { isActive: value });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.isActive).toBe(expected);
+  });
+
+  it('rejects an invalid isActive query string', async () => {
+    const dto = plainToInstance(FabricQueryDto, { isActive: 'yes' });
+
+    expect((await validate(dto)).map((error) => error.property)).toContain('isActive');
   });
 });

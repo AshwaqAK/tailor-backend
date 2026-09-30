@@ -14,10 +14,7 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceCategory } from './enums/service-category.enum';
-import {
-  TailoringService,
-  TailoringServiceDocument,
-} from './schemas/tailoring-service.schema';
+import { TailoringService, TailoringServiceDocument } from './schemas/tailoring-service.schema';
 
 export interface PaginatedTailoringServices {
   data: TailoringServiceDocument[];
@@ -166,10 +163,7 @@ export class ServicesService {
 
       const tailoringServices = await query.exec();
       const servicesById = new Map(
-        tailoringServices.map((tailoringService) => [
-          tailoringService.serviceId,
-          tailoringService,
-        ]),
+        tailoringServices.map((tailoringService) => [tailoringService.serviceId, tailoringService]),
       );
 
       for (const serviceId of uniqueServiceIds) {

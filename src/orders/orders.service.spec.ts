@@ -172,9 +172,7 @@ describe('OrdersService', () => {
     });
     const { order, save: saveOrder } = createOrderDocument();
     const { item, save: saveItem } = createOrderItemDocument();
-    orderModel.mockImplementation((data: Record<string, unknown>) =>
-      Object.assign(order, data),
-    );
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
     let capturedItemInput: Record<string, unknown> | undefined;
     orderItemModel.mockImplementation((data: Record<string, unknown>) => {
       capturedItemInput = data;
@@ -188,10 +186,7 @@ describe('OrdersService', () => {
       { $inc: { sequence: 1 } },
       expect.objectContaining({ session }),
     );
-    expect(servicesService.findActiveByIds).toHaveBeenCalledWith(
-      ['SRV-000001'],
-      session,
-    );
+    expect(servicesService.findActiveByIds).toHaveBeenCalledWith(['SRV-000001'], session);
     expect(fabricsService.deductStock).toHaveBeenCalledWith(
       'FAB-000001',
       1.25,
@@ -285,9 +280,7 @@ describe('OrdersService', () => {
     const { order } = createOrderDocument();
     const { item } = createOrderItemDocument();
     orderModel.mockImplementation(() => order);
-    orderItemModel.mockImplementation((data: Record<string, unknown>) =>
-      Object.assign(item, data),
-    );
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => Object.assign(item, data));
 
     const result = await service.createOrder(validDto(), 'USR-000001');
     catalogService.price = 999;
@@ -460,9 +453,7 @@ describe('OrdersService', () => {
     const { order, save } = createOrderDocument({ status: from });
     orderModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(order) });
 
-    await expect(service.updateOrderStatus('ORD-000007', to, 'USR-000010')).resolves.toBe(
-      order,
-    );
+    await expect(service.updateOrderStatus('ORD-000007', to, 'USR-000010')).resolves.toBe(order);
     expect(order.status).toBe(to);
     expect(order.updatedBy).toBe('USR-000010');
     expect(save).toHaveBeenCalled();

@@ -1,10 +1,6 @@
 /// <reference types="jest" />
 
-import {
-  ConflictException,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 
 import type { CustomerDocument } from '../customers/schemas/customer.schema';
@@ -123,9 +119,7 @@ describe('MeasurementsService', () => {
       'USR-000001',
     );
 
-    expect(measurementModel).toHaveBeenCalledWith(
-      expect.objectContaining({ version: 1 }),
-    );
+    expect(measurementModel).toHaveBeenCalledWith(expect.objectContaining({ version: 1 }));
   });
 
   it('rejects creation when the customer does not exist', async () => {
@@ -152,9 +146,9 @@ describe('MeasurementsService', () => {
     const sort = jest.fn().mockReturnValue({ exec });
     measurementModel.findOne.mockReturnValue({ sort });
 
-    await expect(
-      service.getLatestMeasurement('CUS-000001', ClothingType.SHIRT),
-    ).resolves.toBe(measurement);
+    await expect(service.getLatestMeasurement('CUS-000001', ClothingType.SHIRT)).resolves.toBe(
+      measurement,
+    );
     expect(measurementModel.findOne).toHaveBeenCalledWith({
       customerId: 'CUS-000001',
       clothingType: ClothingType.SHIRT,
@@ -168,9 +162,9 @@ describe('MeasurementsService', () => {
       sort: () => ({ exec: jest.fn().mockResolvedValue(null) }),
     });
 
-    await expect(
-      service.getLatestMeasurement('CUS-000001', ClothingType.BLAZER),
-    ).rejects.toThrow(new NotFoundException('Measurement not found'));
+    await expect(service.getLatestMeasurement('CUS-000001', ClothingType.BLAZER)).rejects.toThrow(
+      new NotFoundException('Measurement not found'),
+    );
   });
 
   it('returns all measurements for a customer using database sorting', async () => {
@@ -180,9 +174,7 @@ describe('MeasurementsService', () => {
     const sort = jest.fn().mockReturnValue({ exec });
     measurementModel.find.mockReturnValue({ sort });
 
-    await expect(service.getMeasurementsByCustomer('CUS-000001')).resolves.toEqual([
-      measurement,
-    ]);
+    await expect(service.getMeasurementsByCustomer('CUS-000001')).resolves.toEqual([measurement]);
     expect(measurementModel.find).toHaveBeenCalledWith({ customerId: 'CUS-000001' });
     expect(sort).toHaveBeenCalledWith({ clothingType: 1, version: -1 });
   });
@@ -210,17 +202,13 @@ describe('MeasurementsService', () => {
         },
         'USR-000001',
       ),
-    ).rejects.toThrow(
-      new ConflictException('A measurement with this version already exists'),
-    );
+    ).rejects.toThrow(new ConflictException('A measurement with this version already exists'));
   });
 
   it('does not expose unexpected persistence errors', async () => {
     customerModel.exists.mockRejectedValue(new Error('database details'));
 
-    await expect(
-      service.getMeasurementsByCustomer('CUS-000001'),
-    ).rejects.toThrow(
+    await expect(service.getMeasurementsByCustomer('CUS-000001')).rejects.toThrow(
       new InternalServerErrorException('Unable to complete the measurement operation'),
     );
   });

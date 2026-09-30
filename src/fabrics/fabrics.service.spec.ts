@@ -108,9 +108,7 @@ describe('FabricsService', () => {
       exec: jest.fn().mockResolvedValue({ sequence: 7 }),
     });
     const { fabric, save } = createFabricDocument();
-    fabricModel.mockImplementation((data: Record<string, unknown>) =>
-      Object.assign(fabric, data),
-    );
+    fabricModel.mockImplementation((data: Record<string, unknown>) => Object.assign(fabric, data));
 
     const result = await service.create(validDto(), 'USR-000009');
 
@@ -283,13 +281,7 @@ describe('FabricsService', () => {
       });
 
       await expect(
-        service.deductStock(
-          'FAB-000007',
-          2.5,
-          'ORD-000001',
-          'USR-000011',
-          orderSession,
-        ),
+        service.deductStock('FAB-000007', 2.5, 'ORD-000001', 'USR-000011', orderSession),
       ).resolves.toBe(fabric);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledWith(
@@ -310,16 +302,8 @@ describe('FabricsService', () => {
 
     it.each([0, -1])('rejects a non-positive stock quantity of %s', async (quantity) => {
       await expect(
-        service.deductStock(
-          'FAB-000007',
-          quantity,
-          'ORD-000001',
-          'USR-000001',
-          orderSession,
-        ),
-      ).rejects.toThrow(
-        new BadRequestException('Fabric quantity to deduct must be positive'),
-      );
+        service.deductStock('FAB-000007', quantity, 'ORD-000001', 'USR-000001', orderSession),
+      ).rejects.toThrow(new BadRequestException('Fabric quantity to deduct must be positive'));
       expect(fabricModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
@@ -334,16 +318,8 @@ describe('FabricsService', () => {
       fabricModel.findOne.mockReturnValue(createFallbackQuery(fabric));
 
       await expect(
-        service.deductStock(
-          'FAB-000007',
-          2,
-          'ORD-000001',
-          'USR-000001',
-          orderSession,
-        ),
-      ).rejects.toThrow(
-        new BadRequestException('Insufficient stock for fabric FAB-000007'),
-      );
+        service.deductStock('FAB-000007', 2, 'ORD-000001', 'USR-000001', orderSession),
+      ).rejects.toThrow(new BadRequestException('Insufficient stock for fabric FAB-000007'));
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ quantity: { $gte: 2 } }),
@@ -363,13 +339,7 @@ describe('FabricsService', () => {
       fabricModel.findOne.mockReturnValue(createFallbackQuery(fabric));
 
       await expect(
-        service.deductStock(
-          'FAB-000007',
-          2,
-          'ORD-000001',
-          'USR-000001',
-          orderSession,
-        ),
+        service.deductStock('FAB-000007', 2, 'ORD-000001', 'USR-000001', orderSession),
       ).rejects.toThrow(new BadRequestException('Fabric FAB-000007 is inactive'));
     });
 
@@ -385,13 +355,7 @@ describe('FabricsService', () => {
       fabricModel.findOne.mockReturnValue(fallbackQuery);
 
       await expect(
-        service.deductStock(
-          'FAB-000007',
-          2,
-          'ORD-000001',
-          'USR-000001',
-          orderSession,
-        ),
+        service.deductStock('FAB-000007', 2, 'ORD-000001', 'USR-000001', orderSession),
       ).resolves.toBe(fabric);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
       expect(fallbackQuery.select).toHaveBeenCalledWith('+stockDeductedOrderIds');
@@ -405,13 +369,7 @@ describe('FabricsService', () => {
       fabricModel.findOne.mockReturnValue(createFallbackQuery(null));
 
       await expect(
-        service.deductStock(
-          'FAB-999999',
-          2,
-          'ORD-000001',
-          'USR-000001',
-          orderSession,
-        ),
+        service.deductStock('FAB-999999', 2, 'ORD-000001', 'USR-000001', orderSession),
       ).rejects.toThrow(new NotFoundException('Fabric FAB-999999 not found'));
     });
   });

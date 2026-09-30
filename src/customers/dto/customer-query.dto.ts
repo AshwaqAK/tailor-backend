@@ -1,5 +1,7 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+
+import { transformBooleanQuery } from '../../common/transforms/boolean-query.transform';
 
 export class CustomerQueryDto {
   @IsOptional()
@@ -29,7 +31,7 @@ export class CustomerQueryDto {
   sortOrder: 'asc' | 'desc' = 'desc';
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(transformBooleanQuery)
   @IsBoolean()
   isActive?: boolean;
 }

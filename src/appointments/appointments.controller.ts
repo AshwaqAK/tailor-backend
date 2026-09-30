@@ -28,10 +28,7 @@ export class AppointmentsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST)
-  create(
-    @Body() createAppointmentDto: CreateAppointmentDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  create(@Body() createAppointmentDto: CreateAppointmentDto, @CurrentUser() user: JwtPayload) {
     return this.appointmentsService.create(createAppointmentDto, user.userId);
   }
 

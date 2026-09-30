@@ -103,9 +103,7 @@ describe('UsersService', () => {
       exec: jest.fn().mockResolvedValue({ sequence: 1 }),
     });
     const { user: document, save } = createUserDocument();
-    userModel.mockImplementation((data: Record<string, unknown>) =>
-      Object.assign(document, data),
-    );
+    userModel.mockImplementation((data: Record<string, unknown>) => Object.assign(document, data));
 
     const result = await service.create({
       name: 'Test Manager',

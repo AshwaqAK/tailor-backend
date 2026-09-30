@@ -42,9 +42,7 @@ export class ReportDateRangeConstraint implements ValidatorConstraintInterface {
       return true;
     }
 
-    return /^\d{4}-\d{2}-\d{2}$/.test(query.toDate)
-      ? fromTime < toTime
-      : fromTime <= toTime;
+    return /^\d{4}-\d{2}-\d{2}$/.test(query.toDate) ? fromTime < toTime : fromTime <= toTime;
   }
 
   defaultMessage(): string {

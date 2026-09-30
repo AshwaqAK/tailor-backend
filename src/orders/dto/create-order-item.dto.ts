@@ -36,8 +36,7 @@ export class CreateOrderItemDto {
   serviceId?: string;
 
   @ValidateIf(
-    (item: CreateOrderItemDto) =>
-      item.fabricId !== undefined || item.fabricQuantity !== undefined,
+    (item: CreateOrderItemDto) => item.fabricId !== undefined || item.fabricQuantity !== undefined,
   )
   @IsString()
   @Matches(/^FAB-\d{6}$/, {
@@ -46,8 +45,7 @@ export class CreateOrderItemDto {
   fabricId?: string;
 
   @ValidateIf(
-    (item: CreateOrderItemDto) =>
-      item.fabricId !== undefined || item.fabricQuantity !== undefined,
+    (item: CreateOrderItemDto) => item.fabricId !== undefined || item.fabricQuantity !== undefined,
   )
   @IsNumber({ maxDecimalPlaces: 3 })
   @IsPositive()

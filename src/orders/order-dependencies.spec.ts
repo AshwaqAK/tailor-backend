@@ -23,9 +23,7 @@ describe('Order dependency validation', () => {
   it('rejects inactive tailoring services', async () => {
     const query = {
       session: jest.fn(),
-      exec: jest.fn().mockResolvedValue([
-        { serviceId: 'SRV-000001', isActive: false },
-      ]),
+      exec: jest.fn().mockResolvedValue([{ serviceId: 'SRV-000001', isActive: false }]),
     };
     query.session.mockReturnValue(query);
     const serviceModel = { find: jest.fn().mockReturnValue(query) };

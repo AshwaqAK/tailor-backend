@@ -49,9 +49,7 @@ describe('AppointmentsService', () => {
     notes: 'Bring the jacket',
   });
 
-  const createAppointmentDocument = (
-    overrides: Partial<AppointmentDocument> = {},
-  ) => {
+  const createAppointmentDocument = (overrides: Partial<AppointmentDocument> = {}) => {
     const save = jest.fn();
     const appointment = {
       appointmentId: 'APT-000007',
@@ -448,12 +446,8 @@ describe('AppointmentsService', () => {
       exec: jest.fn().mockResolvedValue(appointment),
     });
 
-    await expect(
-      service.update('APT-000007', { status: to }, 'USR-000001'),
-    ).rejects.toThrow(
-      new BadRequestException(
-        `Appointment status cannot transition from ${from} to ${to}`,
-      ),
+    await expect(service.update('APT-000007', { status: to }, 'USR-000001')).rejects.toThrow(
+      new BadRequestException(`Appointment status cannot transition from ${from} to ${to}`),
     );
     expect(save).not.toHaveBeenCalled();
     expect(customerModel.exists).not.toHaveBeenCalled();

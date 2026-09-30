@@ -149,10 +149,7 @@ describe('AuthService', () => {
     });
     expect(authTokenService.verifyRefreshToken).toHaveBeenCalledWith('refresh-token');
     expect(bcrypt.compare).toHaveBeenCalledWith('refresh-token', 'stored-refresh-hash');
-    expect(usersService.updateRefreshTokenHash).toHaveBeenCalledWith(
-      userId,
-      'new-refresh-hash',
-    );
+    expect(usersService.updateRefreshTokenHash).toHaveBeenCalledWith(userId, 'new-refresh-hash');
   });
 
   it('rejects an invalid or expired signed refresh token', async () => {
