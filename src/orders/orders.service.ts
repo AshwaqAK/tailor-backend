@@ -17,6 +17,7 @@ import { ServicesService } from '../services/services.service';
 import type { TailoringServiceDocument } from '../services/schemas/tailoring-service.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import { OrderItem, OrderItemDocument } from './schemas/order-item.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
@@ -24,9 +25,13 @@ import { Order, OrderDocument } from './schemas/order.schema';
 export interface OrderWithItems {
   order: OrderDocument;
   items: OrderItemDocument[];
+  paymentStatus: OrderPaymentStatus;
 }
 
-export type CreateOrderResult = OrderWithItems;
+export interface CreateOrderResult {
+  order: OrderDocument;
+  items: OrderItemDocument[];
+}
 
 @Injectable()
 export class OrdersService {
@@ -204,12 +209,17 @@ export class OrdersService {
         orderItems.push(orderItem);
       }
 
+      const totalAmount = this.calculateOrderTotal(createOrderDto.items);
+
       const order = new this.orderModel({
         orderId,
         customerId: createOrderDto.customerId,
         orderDate: createOrderDto.orderDate,
         expectedDeliveryDate: createOrderDto.expectedDeliveryDate,
         notes: createOrderDto.notes,
+        totalAmount,
+        paidAmount: 0,
+        balanceAmount: totalAmount,
         createdBy: userId,
         updatedBy: userId,
       });
@@ -249,6 +259,7 @@ export class OrdersService {
     return {
       order,
       items,
+      paymentStatus: this.getPaymentStatus(order),
     };
   }
 
@@ -280,6 +291,7 @@ export class OrdersService {
     return orders.map((order) => ({
       order,
       items: itemsByOrderId.get(order.orderId) ?? [],
+      paymentStatus: this.getPaymentStatus(order),
     }));
   }
 
@@ -324,6 +336,31 @@ export class OrdersService {
     }
 
     return Number(lineAmount.toFixed(2));
+  }
+
+  private calculateOrderTotal(items: CreateOrderDto['items']): number {
+    const totalAmount = items.reduce(
+      (total, item) => total + item.unitPrice * item.quantity,
+      0,
+    );
+
+    if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+      throw new BadRequestException('Order total amount must be a non-negative number');
+    }
+
+    return Number(totalAmount.toFixed(2));
+  }
+
+  private getPaymentStatus(order: OrderDocument): OrderPaymentStatus {
+    if (order.paidAmount === 0) {
+      return OrderPaymentStatus.UNPAID;
+    }
+
+    if (order.paidAmount < order.totalAmount) {
+      return OrderPaymentStatus.PARTIALLY_PAID;
+    }
+
+    return OrderPaymentStatus.PAID;
   }
 
   private async generateOrderId(session: ClientSession): Promise<string> {

@@ -12,6 +12,7 @@ import { ClothingType } from '../measurements/enums/clothing-type.enum';
 import { FitPreference } from '../measurements/enums/fit-preference.enum';
 import type { ServicesService } from '../services/services.service';
 import type { CounterDocument } from '../users/schemas/counter.schema';
+import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import type { OrderDocument } from './schemas/order.schema';
 import type { OrderItemDocument } from './schemas/order-item.schema';
@@ -57,6 +58,9 @@ describe('OrdersService', () => {
       customerId: 'CUS-000001',
       orderDate,
       status: OrderStatus.DRAFT,
+      totalAmount: 500,
+      paidAmount: 0,
+      balanceAmount: 500,
       createdBy: 'USR-000001',
       updatedBy: 'USR-000001',
       save,
@@ -198,6 +202,9 @@ describe('OrdersService', () => {
       expect.objectContaining({
         orderId: 'ORD-000007',
         customerId: 'CUS-000001',
+        totalAmount: 1500,
+        paidAmount: 0,
+        balanceAmount: 1500,
         createdBy: 'USR-000009',
         updatedBy: 'USR-000009',
       }),
@@ -413,6 +420,7 @@ describe('OrdersService', () => {
     await expect(service.getOrderByOrderId('ORD-000007')).resolves.toEqual({
       order,
       items: [item],
+      paymentStatus: OrderPaymentStatus.UNPAID,
     });
     expect(sort).toHaveBeenCalledWith({ createdAt: 1 });
   });
@@ -426,8 +434,16 @@ describe('OrdersService', () => {
   });
 
   it('retrieves and groups orders by customer without loading per-order items separately', async () => {
-    const first = createOrderDocument({ orderId: 'ORD-000001' }).order;
-    const second = createOrderDocument({ orderId: 'ORD-000002' }).order;
+    const first = createOrderDocument({
+      orderId: 'ORD-000001',
+      paidAmount: 200,
+      balanceAmount: 300,
+    }).order;
+    const second = createOrderDocument({
+      orderId: 'ORD-000002',
+      paidAmount: 500,
+      balanceAmount: 0,
+    }).order;
     const firstItem = createOrderItemDocument({ orderId: 'ORD-000001' }).item;
     orderModel.find.mockReturnValue({
       sort: () => ({ exec: jest.fn().mockResolvedValue([first, second]) }),
@@ -437,8 +453,12 @@ describe('OrdersService', () => {
     });
 
     await expect(service.getOrdersByCustomerId('CUS-000001')).resolves.toEqual([
-      { order: first, items: [firstItem] },
-      { order: second, items: [] },
+      {
+        order: first,
+        items: [firstItem],
+        paymentStatus: OrderPaymentStatus.PARTIALLY_PAID,
+      },
+      { order: second, items: [], paymentStatus: OrderPaymentStatus.PAID },
     ]);
     expect(orderItemModel.find).toHaveBeenCalledWith({
       orderId: { $in: ['ORD-000001', 'ORD-000002'] },
