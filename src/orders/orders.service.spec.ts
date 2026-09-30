@@ -259,13 +259,46 @@ describe('OrdersService', () => {
     expect(session.endSession).toHaveBeenCalled();
   });
 
-  it('rejects invalid item quantities', async () => {
+  it.each([0, -1, 1.5])('rejects invalid item quantity %s', async (quantity) => {
     const dto = validDto();
-    dto.items[0].quantity = 0;
+    dto.items[0].quantity = quantity;
 
     await expect(service.createOrder(dto, 'USR-000001')).rejects.toThrow(
       new BadRequestException('Order service quantity must be a positive integer'),
     );
+  });
+
+  it('keeps the service price snapshot unchanged when the catalog price changes', async () => {
+    mockCustomerExists();
+    mockMeasurement();
+    const catalogService = {
+      serviceId: 'SRV-000001',
+      name: 'Premium stitching',
+      price: 125.5,
+      isActive: true,
+    };
+    servicesService.findActiveByIds.mockResolvedValue([catalogService]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 7 }),
+    });
+    fabricsService.deductStock.mockResolvedValue({ fabricId: 'FAB-000001' });
+    const { order } = createOrderDocument();
+    const { item } = createOrderItemDocument();
+    orderModel.mockImplementation(() => order);
+    orderItemModel.mockImplementation((data: Record<string, unknown>) =>
+      Object.assign(item, data),
+    );
+
+    const result = await service.createOrder(validDto(), 'USR-000001');
+    catalogService.price = 999;
+
+    expect(result.items[0].serviceSnapshot).toEqual({
+      serviceId: 'SRV-000001',
+      name: 'Premium stitching',
+      price: 125.5,
+      quantity: 3,
+      lineAmount: 376.5,
+    });
   });
 
   it('rejects a missing customer', async () => {
@@ -366,7 +399,13 @@ describe('OrdersService', () => {
     await expect(service.createOrder(validDto(), 'USR-000001')).rejects.toThrow(
       'Unable to create order',
     );
-    expect(fabricsService.deductStock).toHaveBeenCalled();
+    expect(fabricsService.deductStock).toHaveBeenCalledWith(
+      'FAB-000001',
+      1.25,
+      'ORD-000007',
+      'USR-000001',
+      session,
+    );
     expect(session.abortTransaction).toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
   });
