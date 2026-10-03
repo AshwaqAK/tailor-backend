@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import { AuthTokenModule } from '../auth/auth-token.module';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { MeasurementsController } from './measurements.controller';
 import { MeasurementsService } from './measurements.service';
 import { Measurement, MeasurementSchema } from './schemas/measurement.schema';
-import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
         schema: CustomerSchema,
       },
     ]),
+    AuthTokenModule,
   ],
   controllers: [MeasurementsController],
   providers: [MeasurementsService],
