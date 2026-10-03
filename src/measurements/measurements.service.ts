@@ -10,6 +10,7 @@ import { Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { CreateMeasurementDto } from './dto/create-measurement.dto';
+import { UpdateMeasurementDto } from './dto/update-measurement.dto';
 import { ClothingType } from './enums/clothing-type.enum';
 import { Measurement, MeasurementDocument } from './schemas/measurement.schema';
 
@@ -49,7 +50,60 @@ export class MeasurementsService {
         notes: createMeasurementDto.notes,
         measuredAt: createMeasurementDto.measuredAt,
         createdBy: userId,
+        updatedBy: userId,
       });
+
+      return await measurement.save();
+    } catch (error) {
+      this.rethrowServiceError(error);
+    }
+  }
+
+  async updateMeasurement(
+    id: string,
+    updateMeasurementDto: UpdateMeasurementDto,
+    userId: string,
+  ): Promise<MeasurementDocument> {
+    try {
+      const measurement = await this.measurementModel.findById(id).exec();
+
+      if (!measurement) {
+        throw new NotFoundException('Measurement not found');
+      }
+
+      if (
+        updateMeasurementDto.customerId !== undefined &&
+        updateMeasurementDto.customerId !== measurement.customerId
+      ) {
+        await this.ensureCustomerExists(updateMeasurementDto.customerId);
+        measurement.customerId = updateMeasurementDto.customerId;
+      }
+
+      if (updateMeasurementDto.clothingType !== undefined) {
+        measurement.clothingType = updateMeasurementDto.clothingType;
+      }
+
+      if (updateMeasurementDto.version !== undefined) {
+        measurement.version = updateMeasurementDto.version;
+      }
+
+      if (updateMeasurementDto.measurements !== undefined) {
+        measurement.set('measurements', updateMeasurementDto.measurements);
+      }
+
+      if (updateMeasurementDto.fitPreference !== undefined) {
+        measurement.fitPreference = updateMeasurementDto.fitPreference;
+      }
+
+      if (updateMeasurementDto.notes !== undefined) {
+        measurement.notes = updateMeasurementDto.notes;
+      }
+
+      if (updateMeasurementDto.measuredAt !== undefined) {
+        measurement.measuredAt = updateMeasurementDto.measuredAt;
+      }
+
+      measurement.updatedBy = userId;
 
       return await measurement.save();
     } catch (error) {

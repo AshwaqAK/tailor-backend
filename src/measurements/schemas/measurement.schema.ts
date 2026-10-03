@@ -66,6 +66,14 @@ export class Measurement {
     trim: true,
   })
   createdBy!: string;
+
+  @Prop({
+    type: String,
+    ref: 'User',
+    required: true,
+    trim: true,
+  })
+  updatedBy!: string;
 }
 
 export const MeasurementSchema = SchemaFactory.createForClass(Measurement);

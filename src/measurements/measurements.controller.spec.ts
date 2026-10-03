@@ -2,6 +2,7 @@
 
 import { Role } from '../common/constants/role.enum';
 import { ClothingType } from './enums/clothing-type.enum';
+import { FitPreference } from './enums/fit-preference.enum';
 import type { MeasurementsService } from './measurements.service';
 import { MeasurementsController } from './measurements.controller';
 
@@ -33,5 +34,24 @@ describe('MeasurementsController', () => {
     });
 
     expect(createMeasurement).toHaveBeenCalledWith(dto, 'USR-000001');
+  });
+
+  it('passes the measurement ID and authenticated user ID when updating a measurement', async () => {
+    const updateMeasurement = jest.fn();
+    const controller = new MeasurementsController({
+      updateMeasurement,
+    } as unknown as MeasurementsService);
+    const dto = {
+      measurements: { chest: 42 },
+      fitPreference: FitPreference.LOOSE,
+    };
+
+    await controller.update('measurement-object-id', dto, {
+      sub: 'database-user-id',
+      userId: 'USR-000001',
+      role: Role.RECEPTIONIST,
+    });
+
+    expect(updateMeasurement).toHaveBeenCalledWith('measurement-object-id', dto, 'USR-000001');
   });
 });

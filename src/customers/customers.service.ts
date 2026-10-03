@@ -20,7 +20,7 @@ export class CustomersService {
 
     @InjectModel(CustomerCounter.name)
     private readonly customerCounterModel: Model<CustomerCounterDocument>,
-  ) {}
+  ) { }
 
   async createCustomer(
     createCustomerDto: CreateCustomerDto,
@@ -139,7 +139,7 @@ export class CustomersService {
 
       filter.$or = [
         { name: { $regex: searchValue, $options: 'i' } },
-        { phone: this.normalizeSearchPhone(searchValue) },
+        { phone: { $regex: this.normalizeSearchPhone(searchValue) } },
         {
           customerId: {
             $regex: `^${this.escapeRegex(searchValue)}`,

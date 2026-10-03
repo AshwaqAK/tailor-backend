@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseEnumPipe, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../common/constants/role.enum';
@@ -7,6 +16,7 @@ import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateMeasurementDto } from './dto/create-measurement.dto';
+import { UpdateMeasurementDto } from './dto/update-measurement.dto';
 import { ClothingType } from './enums/clothing-type.enum';
 import { MeasurementsService } from './measurements.service';
 
@@ -19,6 +29,16 @@ export class MeasurementsController {
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST)
   create(@Body() createMeasurementDto: CreateMeasurementDto, @CurrentUser() user: JwtPayload) {
     return this.measurementsService.createMeasurement(createMeasurementDto, user.userId);
+  }
+
+  @Patch(':id')
+  @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST)
+  update(
+    @Param('id') id: string,
+    @Body() updateMeasurementDto: UpdateMeasurementDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.measurementsService.updateMeasurement(id, updateMeasurementDto, user.userId);
   }
 
   @Get(':customerId/:clothingType/latest')

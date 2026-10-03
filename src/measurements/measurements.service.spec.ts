@@ -20,6 +20,7 @@ describe('MeasurementsService', () => {
   const measuredAt = new Date('2026-01-01T00:00:00.000Z');
   let measurementModel: jest.Mock & {
     findOne: jest.Mock;
+    findById: jest.Mock;
     find: jest.Mock;
   };
   let customerModel: { exists: jest.Mock };
@@ -27,6 +28,9 @@ describe('MeasurementsService', () => {
 
   const createMeasurementDocument = (overrides: Partial<MeasurementDocument> = {}) => {
     const save = jest.fn();
+    const set = jest.fn(function (this: Record<string, unknown>, path: string, value: unknown) {
+      this[path] = value;
+    });
     const measurement = {
       _id: { toString: () => 'measurement-object-id' },
       customerId: 'CUS-000001',
@@ -36,17 +40,20 @@ describe('MeasurementsService', () => {
       fitPreference: FitPreference.REGULAR,
       measuredAt,
       createdBy: 'USR-000001',
+      updatedBy: 'USR-000001',
+      set,
       save,
       ...overrides,
     } as unknown as MeasurementDocument;
     save.mockResolvedValue(measurement);
 
-    return { measurement, save };
+    return { measurement, save, set };
   };
 
   beforeEach(() => {
     measurementModel = Object.assign(jest.fn(), {
       findOne: jest.fn(),
+      findById: jest.fn(),
       find: jest.fn(),
     });
     customerModel = { exists: jest.fn() };
@@ -89,6 +96,7 @@ describe('MeasurementsService', () => {
       notes: undefined,
       version: 3,
       createdBy: 'USR-000009',
+      updatedBy: 'USR-000009',
     });
     expect(save).toHaveBeenCalled();
     expect(result.version).toBe(3);
@@ -120,6 +128,61 @@ describe('MeasurementsService', () => {
     );
 
     expect(measurementModel).toHaveBeenCalledWith(expect.objectContaining({ version: 1 }));
+  });
+
+  it('updates only supplied measurement fields and records the updating user', async () => {
+    const { measurement, save, set } = createMeasurementDocument();
+    measurementModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(measurement),
+    });
+
+    const result = await service.updateMeasurement(
+      'measurement-object-id',
+      {
+        measurements: { chest: 42, waist: 37 },
+        fitPreference: FitPreference.LOOSE,
+        notes: 'Allow extra room',
+      },
+      'USR-000009',
+    );
+
+    expect(measurementModel.findById).toHaveBeenCalledWith('measurement-object-id');
+    expect(set).toHaveBeenCalledWith('measurements', {
+      chest: 42,
+      waist: 37,
+    });
+    expect(measurement.fitPreference).toBe(FitPreference.LOOSE);
+    expect(measurement.notes).toBe('Allow extra room');
+    expect(measurement.updatedBy).toBe('USR-000009');
+    expect(save).toHaveBeenCalled();
+    expect(result).toBe(measurement);
+  });
+
+  it('validates a changed customer before updating a measurement', async () => {
+    const { measurement } = createMeasurementDocument();
+    measurementModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(measurement),
+    });
+    customerModel.exists.mockResolvedValue({ _id: 'new-customer-object-id' });
+
+    await service.updateMeasurement(
+      'measurement-object-id',
+      { customerId: 'CUS-000002' },
+      'USR-000009',
+    );
+
+    expect(customerModel.exists).toHaveBeenCalledWith({ customerId: 'CUS-000002' });
+    expect(measurement.customerId).toBe('CUS-000002');
+  });
+
+  it('throws when the measurement being updated does not exist', async () => {
+    measurementModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.updateMeasurement('missing-measurement-id', { notes: 'Updated' }, 'USR-000009'),
+    ).rejects.toThrow(new NotFoundException('Measurement not found'));
   });
 
   it('rejects creation when the customer does not exist', async () => {
