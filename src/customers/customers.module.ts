@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { CustomerCounter, CustomerCounterSchema } from './schemas/customer-counter.schema';
 import { Customer, CustomerSchema } from './schemas/customer.schema';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 import { AuthTokenModule } from '../auth/auth-token.module';
+import { Counter, CounterSchema } from '../users/schemas/counter.schema';
 
 @Module({
   imports: [
@@ -15,8 +15,8 @@ import { AuthTokenModule } from '../auth/auth-token.module';
         schema: CustomerSchema,
       },
       {
-        name: CustomerCounter.name,
-        schema: CustomerCounterSchema,
+        name: Counter.name,
+        schema: CounterSchema,
       },
     ]),
     AuthTokenModule,

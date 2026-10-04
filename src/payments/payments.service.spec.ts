@@ -262,9 +262,7 @@ describe('PaymentsService', () => {
     orderModel.findOne.mockReturnValue(sessionQuery(createOrder()));
     customerModel.exists.mockReturnValue(sessionQuery({ _id: 'customer-id' }));
 
-    await expect(
-      service.create({ ...validDto(), amount: 800.01 }, 'USR-000001'),
-    ).rejects.toThrow(
+    await expect(service.create({ ...validDto(), amount: 800.01 }, 'USR-000001')).rejects.toThrow(
       new BadRequestException('Payment amount exceeds the outstanding balance'),
     );
     expect(paymentModel).not.toHaveBeenCalled();
@@ -272,9 +270,9 @@ describe('PaymentsService', () => {
   });
 
   it.each([0, -1])('rejects a non-positive payment amount of %s', async (amount) => {
-    await expect(
-      service.create({ ...validDto(), amount }, 'USR-000001'),
-    ).rejects.toThrow(new BadRequestException('Payment amount must be greater than zero'));
+    await expect(service.create({ ...validDto(), amount }, 'USR-000001')).rejects.toThrow(
+      new BadRequestException('Payment amount must be greater than zero'),
+    );
     expect(orderModel.findOne).not.toHaveBeenCalled();
   });
 
@@ -313,9 +311,7 @@ describe('PaymentsService', () => {
 
     await expect(
       service.create({ ...validDto(), customerId: 'CUS-000002' }, 'USR-000001'),
-    ).rejects.toThrow(
-      new BadRequestException('Customer does not belong to the requested order'),
-    );
+    ).rejects.toThrow(new BadRequestException('Customer does not belong to the requested order'));
   });
 
   it('rejects a duplicate successful transaction reference', async () => {
@@ -532,9 +528,7 @@ describe('PaymentsService', () => {
       refundedPayment,
     );
 
-    await expect(service.refund('PAY-000007', 'USR-000010')).resolves.toBe(
-      refundedPayment,
-    );
+    await expect(service.refund('PAY-000007', 'USR-000010')).resolves.toBe(refundedPayment);
     expect(paymentModel.findOneAndUpdate).toHaveBeenCalledWith(
       { paymentId: 'PAY-000007', status: PaymentStatus.SUCCESS },
       {
@@ -635,9 +629,7 @@ describe('PaymentsService', () => {
 
     jest.clearAllMocks();
     paymentModel.findOne.mockReturnValue(sessionQuery(payment));
-    orderModel.findOne.mockReturnValue(
-      sessionQuery(createOrder({ customerId: 'CUS-000002' })),
-    );
+    orderModel.findOne.mockReturnValue(sessionQuery(createOrder({ customerId: 'CUS-000002' })));
 
     await expect(service.refund('PAY-000007', 'USR-000010')).rejects.toThrow(
       new ConflictException('Payment customer does not match the order customer'),

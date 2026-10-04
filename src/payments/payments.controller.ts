@@ -37,10 +37,7 @@ export class PaymentsController {
 
   @Post(':paymentId/refund')
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST)
-  refund(
-    @Param('paymentId', PaymentIdPipe) paymentId: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  refund(@Param('paymentId', PaymentIdPipe) paymentId: string, @CurrentUser() user: JwtPayload) {
     return this.paymentsService.refund(paymentId, user.userId);
   }
 }

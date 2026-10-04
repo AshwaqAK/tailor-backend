@@ -54,10 +54,7 @@ export class PaymentsService {
     private readonly counterModel: Model<CounterDocument>,
   ) {}
 
-  async create(
-    createPaymentDto: CreatePaymentDto,
-    userId: string,
-  ): Promise<PaymentDocument> {
+  async create(createPaymentDto: CreatePaymentDto, userId: string): Promise<PaymentDocument> {
     let session: ClientSession | undefined;
 
     try {
@@ -275,9 +272,7 @@ export class PaymentsService {
       }
 
       if (payment.status !== PaymentStatus.SUCCESS) {
-        throw new BadRequestException(
-          `Payment with status ${payment.status} cannot be refunded`,
-        );
+        throw new BadRequestException(`Payment with status ${payment.status} cannot be refunded`);
       }
 
       this.validatePaymentAmount(payment.amount);
@@ -377,10 +372,7 @@ export class PaymentsService {
     }
   }
 
-  async findByOrder(
-    orderId: string,
-    query: PaymentQueryDto,
-  ): Promise<PaginatedPayments> {
+  async findByOrder(orderId: string, query: PaymentQueryDto): Promise<PaginatedPayments> {
     try {
       const orderExists = await this.orderModel.exists({ orderId }).exec();
 

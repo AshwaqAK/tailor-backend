@@ -19,8 +19,7 @@ jest.mock('@nestjs/mongoose', () => {
         const definition = properties.get(target.constructor) ?? {};
         definition[propertyKey] = {
           type:
-            options.type ??
-            (Reflect.getMetadata('design:type', target, propertyKey) as unknown),
+            options.type ?? (Reflect.getMetadata('design:type', target, propertyKey) as unknown),
           ...options,
         };
         properties.set(target.constructor, definition);
@@ -84,9 +83,7 @@ describe('PaymentSchema', () => {
   it.each(['orderId', 'customerId', 'amount', 'transactionId'])(
     'keeps finalized payment field %s immutable',
     (path) => {
-      const immutable = PaymentSchema.path(path).options.immutable as (
-        this: Payment,
-      ) => boolean;
+      const immutable = PaymentSchema.path(path).options.immutable as (this: Payment) => boolean;
 
       expect(immutable.call({ status: PaymentStatus.PENDING })).toBe(false);
       expect(immutable.call({ status: PaymentStatus.SUCCESS })).toBe(true);

@@ -14,17 +14,11 @@ import { Reflector } from '@nestjs/core';
 import type { AuthTokenService } from '../auth/auth-token.service';
 import { Role } from '../common/constants/role.enum';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
-import {
-  AccessTokenGuard,
-  AuthenticatedRequest,
-} from '../common/guards/access-token.guard';
+import { AccessTokenGuard, AuthenticatedRequest } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PaymentMethod } from './enums/payment-method.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
-import {
-  OrderPaymentsController,
-  PaymentsController,
-} from './payments.controller';
+import { OrderPaymentsController, PaymentsController } from './payments.controller';
 import type { PaymentsService } from './payments.service';
 import { PaymentIdPipe } from './pipes/payment-id.pipe';
 
@@ -111,9 +105,10 @@ describe('Payments controllers', () => {
       AccessTokenGuard,
       RolesGuard,
     ]);
-    expect(
-      Reflect.getMetadata(GUARDS_METADATA, OrderPaymentsController) as unknown[],
-    ).toEqual([AccessTokenGuard, RolesGuard]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, OrderPaymentsController) as unknown[]).toEqual([
+      AccessTokenGuard,
+      RolesGuard,
+    ]);
   });
 
   it('rejects unauthenticated access to a payment endpoint', async () => {
@@ -133,10 +128,8 @@ describe('Payments controllers', () => {
 
   it('rejects an unauthorized role and allows an authorized role for refunds', () => {
     const guard = new RolesGuard(new Reflector());
-    const refundHandler = Object.getOwnPropertyDescriptor(
-      PaymentsController.prototype,
-      'refund',
-    )?.value as object;
+    const refundHandler = Object.getOwnPropertyDescriptor(PaymentsController.prototype, 'refund')
+      ?.value as object;
     const createContext = (role: Role) =>
       ({
         getHandler: () => refundHandler,
@@ -170,9 +163,12 @@ describe('Payments controllers', () => {
       Role.RECEPTIONIST,
       Role.TAILOR,
     ]);
-    expect(
-      Reflect.getMetadata(ROLES_KEY, findByOrderHandler as object) as Role[],
-    ).toEqual([Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST, Role.TAILOR]);
+    expect(Reflect.getMetadata(ROLES_KEY, findByOrderHandler as object) as Role[]).toEqual([
+      Role.SUPER_ADMIN,
+      Role.MANAGER,
+      Role.RECEPTIONIST,
+      Role.TAILOR,
+    ]);
   });
 
   it('restricts payment creation and refunds to established write roles', () => {
@@ -186,12 +182,8 @@ describe('Payments controllers', () => {
     )?.value;
     const writeRoles = [Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST];
 
-    expect(Reflect.getMetadata(ROLES_KEY, createHandler as object) as Role[]).toEqual(
-      writeRoles,
-    );
-    expect(Reflect.getMetadata(ROLES_KEY, refundHandler as object) as Role[]).toEqual(
-      writeRoles,
-    );
+    expect(Reflect.getMetadata(ROLES_KEY, createHandler as object) as Role[]).toEqual(writeRoles);
+    expect(Reflect.getMetadata(ROLES_KEY, refundHandler as object) as Role[]).toEqual(writeRoles);
     expect(writeRoles).not.toContain(Role.TAILOR);
   });
 

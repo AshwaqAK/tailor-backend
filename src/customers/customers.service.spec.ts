@@ -4,9 +4,9 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Connection, Model } from 'mongoose';
 
 import { Gender } from './enums/gender.enum';
-import type { CustomerCounterDocument } from './schemas/customer-counter.schema';
 import type { CustomerDocument } from './schemas/customer.schema';
 import { CustomersService } from './customers.service';
+import { CounterDocument } from '../users/schemas/counter.schema';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -81,7 +81,7 @@ describe('CustomersService', () => {
     service = new CustomersService(
       connection as unknown as Connection,
       customerModel as unknown as Model<CustomerDocument>,
-      counterModel as unknown as Model<CustomerCounterDocument>,
+      counterModel as unknown as Model<CounterDocument>,
     );
   });
 
@@ -182,7 +182,7 @@ describe('CustomersService', () => {
       isActive: true,
       $or: [
         { name: { $regex: 'CUS.000001', $options: 'i' } },
-        { phone: 'CUS.000001' },
+        { phone: { $regex: 'CUS.000001' } },
         { customerId: { $regex: '^CUS\\.000001', $options: 'i' } },
       ],
     });
