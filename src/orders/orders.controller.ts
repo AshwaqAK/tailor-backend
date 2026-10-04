@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { Role } from '../common/constants/role.enum';
@@ -8,6 +8,7 @@ import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CustomerIdParamDto } from './dto/customer-id-param.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderListQueryDto } from './dto/order-list-query.dto';
 import { OrderIdParamDto } from './dto/order-id-param.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrdersService } from './orders.service';
@@ -25,8 +26,8 @@ export class OrdersController {
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST, Role.TAILOR)
-  findAll() {
-    return this.ordersService.getAllOrders();
+  findAll(@Query() query: OrderListQueryDto) {
+    return this.ordersService.getAllOrders(query);
   }
 
   @Get('customer/:customerId')
