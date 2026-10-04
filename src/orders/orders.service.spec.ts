@@ -202,9 +202,9 @@ describe('OrdersService', () => {
       expect.objectContaining({
         orderId: 'ORD-000007',
         customerId: 'CUS-000001',
-        totalAmount: 1500,
+        totalAmount: 1656.88,
         paidAmount: 0,
-        balanceAmount: 1500,
+        balanceAmount: 1656.88,
         createdBy: 'USR-000009',
         updatedBy: 'USR-000009',
       }),
@@ -283,7 +283,10 @@ describe('OrdersService', () => {
     counterModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ sequence: 7 }),
     });
-    fabricsService.deductStock.mockResolvedValue({ fabricId: 'FAB-000001' });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      pricePerUnit: 125.5,
+    });
     const { order } = createOrderDocument();
     const { item } = createOrderItemDocument();
     orderModel.mockImplementation(() => order);
@@ -360,7 +363,10 @@ describe('OrdersService', () => {
     counterModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ sequence: 7 }),
     });
-    fabricsService.deductStock.mockResolvedValue({ fabricId: 'FAB-000001' });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      pricePerUnit: 125.5,
+    });
     mockMeasurement({ ...measurement, customerId: 'CUS-000002' } as MeasurementDocument);
 
     await expect(service.createOrder(validDto(), 'USR-000001')).rejects.toThrow(
@@ -389,7 +395,10 @@ describe('OrdersService', () => {
     counterModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ sequence: 7 }),
     });
-    fabricsService.deductStock.mockResolvedValue({ fabricId: 'FAB-000001' });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      pricePerUnit: 125.5,
+    });
     const { order, save } = createOrderDocument();
     save.mockRejectedValue(new Error('write failed'));
     orderModel.mockImplementation(() => order);

@@ -224,7 +224,11 @@ export class OrdersService {
         orderItems.push(orderItem);
       }
 
-      const totalAmount = this.calculateOrderTotal(createOrderDto.items);
+      const totalAmount = this.calculateOrderTotal(
+        createOrderDto.items,
+        fabricQuantities,
+        fabricsById,
+      );
 
       const order = new this.orderModel({
         orderId,
@@ -425,8 +429,22 @@ export class OrdersService {
     return Number(lineAmount.toFixed(2));
   }
 
-  private calculateOrderTotal(items: CreateOrderDto['items']): number {
-    const totalAmount = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
+  private calculateOrderTotal(
+    items: CreateOrderDto['items'],
+    fabricQuantities: ReadonlyMap<string, number>,
+    fabricsById: ReadonlyMap<string, FabricDocument>,
+  ): number {
+    const garmentTotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
+    const fabricTotal = Array.from(fabricQuantities).reduce((total, [fabricId, quantity]) => {
+      const fabric = fabricsById.get(fabricId);
+
+      if (!fabric) {
+        throw new InternalServerErrorException('Unable to calculate fabric cost');
+      }
+
+      return total + fabric.pricePerUnit * quantity;
+    }, 0);
+    const totalAmount = garmentTotal + fabricTotal;
 
     if (!Number.isFinite(totalAmount) || totalAmount < 0) {
       throw new BadRequestException('Order total amount must be a non-negative number');
