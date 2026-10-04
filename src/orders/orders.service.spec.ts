@@ -465,6 +465,48 @@ describe('OrdersService', () => {
     });
   });
 
+  it('retrieves and groups all orders without loading per-order items separately', async () => {
+    const first = createOrderDocument({
+      orderId: 'ORD-000001',
+      paidAmount: 200,
+      balanceAmount: 300,
+    }).order;
+    const second = createOrderDocument({
+      orderId: 'ORD-000002',
+      paidAmount: 500,
+      balanceAmount: 0,
+    }).order;
+    const firstItem = createOrderItemDocument({ orderId: 'ORD-000001' }).item;
+    orderModel.find.mockReturnValue({
+      sort: () => ({ exec: jest.fn().mockResolvedValue([first, second]) }),
+    });
+    orderItemModel.find.mockReturnValue({
+      sort: () => ({ exec: jest.fn().mockResolvedValue([firstItem]) }),
+    });
+
+    await expect(service.getAllOrders()).resolves.toEqual([
+      {
+        order: first,
+        items: [firstItem],
+        paymentStatus: OrderPaymentStatus.PARTIALLY_PAID,
+      },
+      { order: second, items: [], paymentStatus: OrderPaymentStatus.PAID },
+    ]);
+    expect(orderModel.find).toHaveBeenCalledWith({});
+    expect(orderItemModel.find).toHaveBeenCalledWith({
+      orderId: { $in: ['ORD-000001', 'ORD-000002'] },
+    });
+  });
+
+  it('returns an empty list without loading order items when there are no orders', async () => {
+    orderModel.find.mockReturnValue({
+      sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
+    });
+
+    await expect(service.getAllOrders()).resolves.toEqual([]);
+    expect(orderItemModel.find).not.toHaveBeenCalled();
+  });
+
   it.each([
     [OrderStatus.DRAFT, OrderStatus.CONFIRMED],
     [OrderStatus.DRAFT, OrderStatus.CANCELLED],

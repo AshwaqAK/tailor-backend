@@ -20,7 +20,7 @@ export class CustomersService {
 
     @InjectModel(CustomerCounter.name)
     private readonly customerCounterModel: Model<CustomerCounterDocument>,
-  ) { }
+  ) {}
 
   async createCustomer(
     createCustomerDto: CreateCustomerDto,
@@ -240,6 +240,47 @@ export class CustomersService {
     }
 
     return this.toCustomerResponse(customer);
+  }
+
+  async activateCustomer(id: string, userId: string): Promise<CustomerResponse> {
+    const customer = await this.customerModel.findById(id).exec();
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const activeCustomerWithSamePhone = await this.customerModel
+      .findOne({
+        phone: customer.phone,
+        _id: { $ne: id },
+        isActive: true,
+      })
+      .lean()
+      .exec();
+
+    if (activeCustomerWithSamePhone) {
+      throw new ConflictException('An active customer with this phone number already exists');
+    }
+
+    const activatedCustomer = await this.customerModel
+      .findByIdAndUpdate(
+        id,
+        {
+          isActive: true,
+          updatedBy: userId,
+        },
+        {
+          new: true,
+          runValidators: true,
+        },
+      )
+      .exec();
+
+    if (!activatedCustomer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.toCustomerResponse(activatedCustomer);
   }
 
   private async generateCustomerId(session: ClientSession): Promise<string> {

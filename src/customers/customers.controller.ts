@@ -56,6 +56,12 @@ export class CustomersController {
     return this.customersService.updateCustomer(id, updateCustomerDto, user.userId);
   }
 
+  @Patch(':id/activate')
+  @Roles(Role.SUPER_ADMIN, Role.MANAGER)
+  activate(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.customersService.activateCustomer(id, user.userId);
+  }
+
   @Patch(':id/status')
   @Roles(Role.SUPER_ADMIN, Role.MANAGER)
   deactivate(@Param('id') id: string, @CurrentUser() user: JwtPayload) {

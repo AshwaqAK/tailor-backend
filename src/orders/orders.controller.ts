@@ -23,6 +23,12 @@ export class OrdersController {
     return this.ordersService.createOrder(createOrderDto, user.userId);
   }
 
+  @Get()
+  @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST, Role.TAILOR)
+  findAll() {
+    return this.ordersService.getAllOrders();
+  }
+
   @Get('customer/:customerId')
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST, Role.TAILOR)
   findByCustomer(@Param() params: CustomerIdParamDto) {
