@@ -295,6 +295,38 @@ export class OrdersService {
     }));
   }
 
+  async getAllOrders(): Promise<OrderWithItems[]> {
+    const orders = await this.orderModel.find({}).sort({ createdAt: -1 }).exec();
+
+    if (orders.length === 0) {
+      return [];
+    }
+
+    const orderIds = orders.map((order) => order.orderId);
+    const items = await this.orderItemModel
+      .find({
+        orderId: {
+          $in: orderIds,
+        },
+      })
+      .sort({ createdAt: 1 })
+      .exec();
+
+    const itemsByOrderId = new Map<string, OrderItemDocument[]>();
+
+    for (const item of items) {
+      const orderItems = itemsByOrderId.get(item.orderId) ?? [];
+      orderItems.push(item);
+      itemsByOrderId.set(item.orderId, orderItems);
+    }
+
+    return orders.map((order) => ({
+      order,
+      items: itemsByOrderId.get(order.orderId) ?? [],
+      paymentStatus: this.getPaymentStatus(order),
+    }));
+  }
+
   async updateOrderStatus(
     orderId: string,
     status: OrderStatus,
@@ -339,10 +371,7 @@ export class OrdersService {
   }
 
   private calculateOrderTotal(items: CreateOrderDto['items']): number {
-    const totalAmount = items.reduce(
-      (total, item) => total + item.unitPrice * item.quantity,
-      0,
-    );
+    const totalAmount = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
 
     if (!Number.isFinite(totalAmount) || totalAmount < 0) {
       throw new BadRequestException('Order total amount must be a non-negative number');

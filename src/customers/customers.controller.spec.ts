@@ -29,11 +29,13 @@ describe('CustomersController', () => {
     expect(createCustomer).toHaveBeenCalledWith(dto, 'USR-000001');
   });
 
-  it('passes the authenticated user ID when updating and deactivating', async () => {
+  it('passes the authenticated user ID when updating, activating, and deactivating', async () => {
     const updateCustomer = jest.fn();
+    const activateCustomer = jest.fn();
     const deactivateCustomer = jest.fn();
     const controller = new CustomersController({
       updateCustomer,
+      activateCustomer,
       deactivateCustomer,
     } as unknown as CustomersService);
     const user = {
@@ -43,9 +45,11 @@ describe('CustomersController', () => {
     };
 
     await controller.update('customer-id', { name: 'Updated' }, user);
+    await controller.activate('customer-id', user);
     await controller.deactivate('customer-id', user);
 
     expect(updateCustomer).toHaveBeenCalledWith('customer-id', { name: 'Updated' }, 'USR-000001');
+    expect(activateCustomer).toHaveBeenCalledWith('customer-id', 'USR-000001');
     expect(deactivateCustomer).toHaveBeenCalledWith('customer-id', 'USR-000001');
   });
 });

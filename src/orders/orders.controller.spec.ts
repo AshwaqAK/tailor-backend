@@ -39,6 +39,15 @@ describe('OrdersController', () => {
     expect(createOrder).toHaveBeenCalledWith(dto, 'USR-000001');
   });
 
+  it('retrieves all orders', async () => {
+    const getAllOrders = jest.fn();
+    const controller = new OrdersController({ getAllOrders } as unknown as OrdersService);
+
+    await controller.findAll();
+
+    expect(getAllOrders).toHaveBeenCalledWith();
+  });
+
   it('passes the authenticated user ID when updating status', async () => {
     const updateOrderStatus = jest.fn();
     const controller = new OrdersController({

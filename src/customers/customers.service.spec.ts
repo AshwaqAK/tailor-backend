@@ -251,4 +251,42 @@ describe('CustomersService', () => {
     );
     expect(result.isActive).toBe(false);
   });
+
+  it('activates an inactive customer and records updatedBy', async () => {
+    const { customer } = createCustomerDocument({ isActive: false });
+    customerModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
+    customerModel.findOne.mockReturnValue({
+      lean: () => ({ exec: jest.fn().mockResolvedValue(null) }),
+    });
+    customerModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ ...customer, isActive: true, updatedBy: 'USR-000011' }),
+    });
+
+    const result = await service.activateCustomer(objectId, 'USR-000011');
+
+    expect(customerModel.findOne).toHaveBeenCalledWith({
+      phone: customer.phone,
+      _id: { $ne: objectId },
+      isActive: true,
+    });
+    expect(customerModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      objectId,
+      { isActive: true, updatedBy: 'USR-000011' },
+      { new: true, runValidators: true },
+    );
+    expect(result.isActive).toBe(true);
+  });
+
+  it('does not activate a customer when the phone belongs to another active customer', async () => {
+    const { customer } = createCustomerDocument({ isActive: false });
+    customerModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
+    customerModel.findOne.mockReturnValue({
+      lean: () => ({ exec: jest.fn().mockResolvedValue({ _id: 'another-customer-id' }) }),
+    });
+
+    await expect(service.activateCustomer(objectId, 'USR-000011')).rejects.toThrow(
+      new ConflictException('An active customer with this phone number already exists'),
+    );
+    expect(customerModel.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
 });
