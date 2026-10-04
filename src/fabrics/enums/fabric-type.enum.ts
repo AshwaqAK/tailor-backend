@@ -1,6 +1,7 @@
 export enum FabricType {
   COTTON = 'COTTON',
   SILK = 'SILK',
+  SATIN = 'SATIN',
   LINEN = 'LINEN',
   WOOL = 'WOOL',
   POLYESTER = 'POLYESTER',
