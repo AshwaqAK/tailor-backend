@@ -478,20 +478,27 @@ describe('OrdersService', () => {
     }).order;
     const firstItem = createOrderItemDocument({ orderId: 'ORD-000001' }).item;
     orderModel.find.mockReturnValue({
-      sort: () => ({ exec: jest.fn().mockResolvedValue([first, second]) }),
+      sort: () => ({ limit: () => ({ exec: jest.fn().mockResolvedValue([first, second]) }) }),
     });
     orderItemModel.find.mockReturnValue({
       sort: () => ({ exec: jest.fn().mockResolvedValue([firstItem]) }),
     });
 
-    await expect(service.getAllOrders()).resolves.toEqual([
-      {
-        order: first,
-        items: [firstItem],
-        paymentStatus: OrderPaymentStatus.PARTIALLY_PAID,
+    await expect(service.getAllOrders()).resolves.toEqual({
+      data: [
+        {
+          order: first,
+          items: [firstItem],
+          paymentStatus: OrderPaymentStatus.PARTIALLY_PAID,
+        },
+        { order: second, items: [], paymentStatus: OrderPaymentStatus.PAID },
+      ],
+      meta: {
+        limit: 20,
+        hasNextPage: false,
+        nextCursor: null,
       },
-      { order: second, items: [], paymentStatus: OrderPaymentStatus.PAID },
-    ]);
+    });
     expect(orderModel.find).toHaveBeenCalledWith({});
     expect(orderItemModel.find).toHaveBeenCalledWith({
       orderId: { $in: ['ORD-000001', 'ORD-000002'] },
@@ -500,11 +507,73 @@ describe('OrdersService', () => {
 
   it('returns an empty list without loading order items when there are no orders', async () => {
     orderModel.find.mockReturnValue({
+      sort: () => ({ limit: () => ({ exec: jest.fn().mockResolvedValue([]) }) }),
+    });
+
+    await expect(service.getAllOrders()).resolves.toEqual({
+      data: [],
+      meta: {
+        limit: 20,
+        hasNextPage: false,
+        nextCursor: null,
+      },
+    });
+    expect(orderItemModel.find).not.toHaveBeenCalled();
+  });
+
+  it('uses the cursor to retrieve the next page with a stable sort order', async () => {
+    const first = createOrderDocument({
+      orderId: 'ORD-000003',
+      createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      paidAmount: 500,
+      balanceAmount: 0,
+    }).order;
+    const second = createOrderDocument({
+      orderId: 'ORD-000002',
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      paidAmount: 500,
+      balanceAmount: 0,
+    }).order;
+    const third = createOrderDocument({
+      orderId: 'ORD-000001',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      paidAmount: 500,
+      balanceAmount: 0,
+    }).order;
+    const limit = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue([first, second, third]),
+    });
+    orderModel.find.mockReturnValue({ sort: () => ({ limit }) });
+    orderItemModel.find.mockReturnValue({
       sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
     });
 
-    await expect(service.getAllOrders()).resolves.toEqual([]);
-    expect(orderItemModel.find).not.toHaveBeenCalled();
+    const result = await service.getAllOrders({ limit: 2 });
+
+    expect(limit).toHaveBeenCalledWith(3);
+    expect(orderModel.find).toHaveBeenCalledWith({});
+    expect(result.data).toHaveLength(2);
+    expect(result.meta.limit).toBe(2);
+    expect(result.meta.hasNextPage).toBe(true);
+    expect(typeof result.meta.nextCursor).toBe('string');
+
+    const cursor = result.meta.nextCursor;
+    const nextPageLimit = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue([third]),
+    });
+    orderModel.find.mockReturnValue({ sort: () => ({ limit: nextPageLimit }) });
+
+    await service.getAllOrders({ limit: 2, cursor: cursor! });
+
+    expect(orderModel.find).toHaveBeenLastCalledWith({
+      $or: [
+        { createdAt: { $lt: second.createdAt } },
+        {
+          createdAt: second.createdAt,
+          orderId: { $lt: second.orderId },
+        },
+      ],
+    });
   });
 
   it.each([

@@ -17,6 +17,7 @@ import { ServicesService } from '../services/services.service';
 import type { TailoringServiceDocument } from '../services/schemas/tailoring-service.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderListQueryDto } from './dto/order-list-query.dto';
 import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import { OrderItem, OrderItemDocument } from './schemas/order-item.schema';
@@ -32,6 +33,20 @@ export interface CreateOrderResult {
   order: OrderDocument;
   items: OrderItemDocument[];
 }
+
+export interface CursorPaginatedOrders {
+  data: OrderWithItems[];
+  meta: {
+    limit: number;
+    hasNextPage: boolean;
+    nextCursor: string | null;
+  };
+}
+
+type OrderCursor = {
+  createdAt: Date;
+  orderId: string;
+};
 
 @Injectable()
 export class OrdersService {
@@ -295,11 +310,40 @@ export class OrdersService {
     }));
   }
 
-  async getAllOrders(): Promise<OrderWithItems[]> {
-    const orders = await this.orderModel.find({}).sort({ createdAt: -1 }).exec();
+  async getAllOrders(
+    query: OrderListQueryDto = new OrderListQueryDto(),
+  ): Promise<CursorPaginatedOrders> {
+    const { cursor, limit = 20 } = query;
+    const filter: Record<string, unknown> = {};
+
+    if (cursor) {
+      const decodedCursor = this.decodeOrderCursor(cursor);
+      filter.$or = [
+        { createdAt: { $lt: decodedCursor.createdAt } },
+        {
+          createdAt: decodedCursor.createdAt,
+          orderId: { $lt: decodedCursor.orderId },
+        },
+      ];
+    }
+
+    const fetchedOrders = await this.orderModel
+      .find(filter)
+      .sort({ createdAt: -1, orderId: -1 })
+      .limit(limit + 1)
+      .exec();
+    const hasNextPage = fetchedOrders.length > limit;
+    const orders = hasNextPage ? fetchedOrders.slice(0, limit) : fetchedOrders;
 
     if (orders.length === 0) {
-      return [];
+      return {
+        data: [],
+        meta: {
+          limit,
+          hasNextPage: false,
+          nextCursor: null,
+        },
+      };
     }
 
     const orderIds = orders.map((order) => order.orderId);
@@ -320,11 +364,22 @@ export class OrdersService {
       itemsByOrderId.set(item.orderId, orderItems);
     }
 
-    return orders.map((order) => ({
+    const data = orders.map((order) => ({
       order,
       items: itemsByOrderId.get(order.orderId) ?? [],
       paymentStatus: this.getPaymentStatus(order),
     }));
+
+    const lastOrder = orders.at(-1);
+
+    return {
+      data,
+      meta: {
+        limit,
+        hasNextPage,
+        nextCursor: hasNextPage && lastOrder ? this.encodeOrderCursor(lastOrder) : null,
+      },
+    };
   }
 
   async updateOrderStatus(
@@ -390,6 +445,42 @@ export class OrdersService {
     }
 
     return OrderPaymentStatus.PAID;
+  }
+
+  private encodeOrderCursor(order: OrderDocument): string {
+    return Buffer.from(
+      JSON.stringify({
+        createdAt: order.createdAt.toISOString(),
+        orderId: order.orderId,
+      }),
+    ).toString('base64url');
+  }
+
+  private decodeOrderCursor(cursor: string): OrderCursor {
+    try {
+      const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('createdAt' in parsed) ||
+        !('orderId' in parsed) ||
+        typeof parsed.createdAt !== 'string' ||
+        typeof parsed.orderId !== 'string'
+      ) {
+        throw new Error('Invalid cursor shape');
+      }
+
+      const createdAt = new Date(parsed.createdAt);
+
+      if (Number.isNaN(createdAt.getTime()) || !parsed.orderId) {
+        throw new Error('Invalid cursor value');
+      }
+
+      return { createdAt, orderId: parsed.orderId };
+    } catch {
+      throw new BadRequestException('Invalid order cursor');
+    }
   }
 
   private async generateOrderId(session: ClientSession): Promise<string> {

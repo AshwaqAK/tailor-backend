@@ -42,10 +42,11 @@ describe('OrdersController', () => {
   it('retrieves all orders', async () => {
     const getAllOrders = jest.fn();
     const controller = new OrdersController({ getAllOrders } as unknown as OrdersService);
+    const query = { limit: 20 };
 
-    await controller.findAll();
+    await controller.findAll(query);
 
-    expect(getAllOrders).toHaveBeenCalledWith();
+    expect(getAllOrders).toHaveBeenCalledWith(query);
   });
 
   it('passes the authenticated user ID when updating status', async () => {
