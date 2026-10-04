@@ -63,14 +63,19 @@ describe('CreatePaymentDto validation', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it.each(['paymentId', 'status', 'paidAt', 'createdBy', 'updatedBy', 'paidAmount', 'balanceAmount'])(
-    'rejects the server-controlled or unknown %s property',
-    async (property) => {
-      await expect(
-        validationPipe.transform({ ...validInput(), [property]: 'client-value' }, metadata),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    },
-  );
+  it.each([
+    'paymentId',
+    'status',
+    'paidAt',
+    'createdBy',
+    'updatedBy',
+    'paidAmount',
+    'balanceAmount',
+  ])('rejects the server-controlled or unknown %s property', async (property) => {
+    await expect(
+      validationPipe.transform({ ...validInput(), [property]: 'client-value' }, metadata),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('Payment query DTO validation', () => {

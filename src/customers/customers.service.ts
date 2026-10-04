@@ -3,11 +3,11 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from './schemas/customer.schema';
-import { CustomerCounter, CustomerCounterDocument } from './schemas/customer-counter.schema';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponse } from './types/customer-response.type';
+import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 
 @Injectable()
 export class CustomersService {
@@ -18,8 +18,8 @@ export class CustomersService {
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
 
-    @InjectModel(CustomerCounter.name)
-    private readonly customerCounterModel: Model<CustomerCounterDocument>,
+    @InjectModel(Counter.name)
+    private readonly customerCounterModel: Model<CounterDocument>,
   ) {}
 
   async createCustomer(
