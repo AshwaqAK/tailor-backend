@@ -4,6 +4,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthTokenModule } from '../auth/auth-token.module';
 import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { FabricsModule } from '../fabrics/fabrics.module';
+import { GarmentType, GarmentTypeSchema } from '../garment-types/schemas/garment-type.schema';
+import { GarmentTypesModule } from '../garment-types/garment-types.module';
 import { Measurement, MeasurementSchema } from '../measurements/schemas/measurement.schema';
 import { ServicesModule } from '../services/services.module';
 import { Counter, CounterSchema } from '../users/schemas/counter.schema';
@@ -35,9 +37,14 @@ import { Order, OrderSchema } from './schemas/order.schema';
         name: Counter.name,
         schema: CounterSchema,
       },
+      {
+        name: GarmentType.name,
+        schema: GarmentTypeSchema,
+      },
     ]),
     AuthTokenModule,
     FabricsModule,
+    GarmentTypesModule,
     ServicesModule,
   ],
   controllers: [OrdersController],

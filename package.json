@@ -18,7 +18,11 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed": "npm run build && node dist/users/user.seed.js"
+    "seed": "npm run build && node dist/users/user.seed.js",
+    "seed:garment-types": "npm run build && tsx src/garment-types/garment-type.seed.ts",
+    "seed:garment-type-measurement-fields": "npm run build && tsx src/garment-types/measurement-fields.seed.ts",
+    "migrate:measurement-garment-types": "npm run build && tsx src/measurements/measurement-garment-type-backfill.ts",
+    "migrate:order-item-garment-types": "npm run build && tsx src/orders/order-item-garment-type-backfill.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -9,6 +9,84 @@ import { ClothingType } from '../../measurements/enums/clothing-type.enum';
 import { FitPreference } from '../../measurements/enums/fit-preference.enum';
 import { Measurement } from '../../measurements/schemas/measurement.schema';
 import { TailoringService } from '../../services/schemas/tailoring-service.schema';
+import { GarmentType } from '../../garment-types/schemas/garment-type.schema';
+import { PricingType } from '../../garment-types/enums/pricing-type.enum';
+
+@Schema({
+  _id: false,
+  versionKey: false,
+})
+export class TailoringCustomizationOptionSnapshot {
+  @Prop({ required: true, trim: true })
+  optionName!: string;
+
+  @Prop({ type: String, enum: PricingType, required: true })
+  pricingType!: PricingType;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  configuredPrice!: number;
+
+  @Prop({ type: Number, min: 0 })
+  submittedValue?: number;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  calculatedCharge!: number;
+}
+
+export const TailoringCustomizationOptionSnapshotSchema = SchemaFactory.createForClass(
+  TailoringCustomizationOptionSnapshot,
+);
+
+@Schema({
+  _id: false,
+  versionKey: false,
+})
+export class TailoringCustomizationGroupSnapshot {
+  @Prop({ required: true, trim: true })
+  groupName!: string;
+
+  @Prop({ type: [TailoringCustomizationOptionSnapshot], required: true })
+  options!: TailoringCustomizationOptionSnapshot[];
+
+  @Prop({ type: Number, required: true, min: 0 })
+  calculatedCharge!: number;
+}
+
+export const TailoringCustomizationGroupSnapshotSchema = SchemaFactory.createForClass(
+  TailoringCustomizationGroupSnapshot,
+);
+
+@Schema({
+  _id: false,
+  versionKey: false,
+})
+export class TailoringPricingSnapshot {
+  @Prop({ required: true, trim: true })
+  garmentTypeName!: string;
+
+  @Prop({ required: true, trim: true, uppercase: true })
+  garmentTypeCode!: string;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  baseTailoringPrice!: number;
+
+  @Prop({ type: [TailoringCustomizationGroupSnapshot], required: true })
+  customizationGroups!: TailoringCustomizationGroupSnapshot[];
+
+  @Prop({ type: Number, required: true, min: 0 })
+  calculatedCustomizationCharge!: number;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  calculatedPerGarmentTailoringAmount!: number;
+
+  @Prop({ type: Number, required: true, min: 1 })
+  quantity!: number;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  finalTailoringTotal!: number;
+}
+
+export const TailoringPricingSnapshotSchema = SchemaFactory.createForClass(TailoringPricingSnapshot);
 
 @Schema({
   _id: false,
@@ -40,9 +118,17 @@ export class MeasurementSnapshot {
   @Prop({
     type: String,
     enum: ClothingType,
-    required: true,
   })
-  clothingType!: ClothingType;
+  clothingType?: ClothingType;
+
+  @Prop({
+    type: String,
+    ref: GarmentType.name,
+    required: true,
+    trim: true,
+    match: /^GRT-\d{6}$/,
+  })
+  garmentTypeId!: string;
 
   @Prop({
     type: Map,
@@ -194,9 +280,17 @@ export class OrderItem {
   @Prop({
     type: String,
     enum: ClothingType,
-    required: true,
   })
-  clothingType!: ClothingType;
+  clothingType?: ClothingType;
+
+  @Prop({
+    type: String,
+    ref: GarmentType.name,
+    required: true,
+    trim: true,
+    match: /^GRT-\d{6}$/,
+  })
+  garmentTypeId!: string;
 
   @Prop({
     type: Number,
@@ -211,6 +305,15 @@ export class OrderItem {
     min: 0,
   })
   unitPrice!: number;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  customizations?: Record<string, unknown>;
+
+  @Prop({
+    type: TailoringPricingSnapshotSchema,
+    required: true,
+  })
+  tailoringPricingSnapshot!: TailoringPricingSnapshot;
 
   @Prop({
     type: Number,

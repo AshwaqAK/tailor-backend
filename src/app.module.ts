@@ -17,6 +17,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { FabricsModule } from './fabrics/fabrics.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PaymentsModule } from './payments/payments.module';
+import { GarmentTypesModule } from './garment-types/garment-types.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { PaymentsModule } from './payments/payments.module';
     FabricsModule,
     DashboardModule,
     PaymentsModule,
+    GarmentTypesModule,
   ],
 })
 export class AppModule {}

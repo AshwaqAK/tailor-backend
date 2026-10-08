@@ -27,6 +27,7 @@ describe('OrdersController', () => {
       items: [
         {
           clothingType: ClothingType.SHIRT,
+          garmentTypeId: 'GRT-000001',
           quantity: 1,
           unitPrice: 500,
           measurementId: '507f1f77bcf86cd799439011',
