@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpException,
   Injectable,
@@ -9,6 +10,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
+import { GarmentType, GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
 import { CreateMeasurementDto } from './dto/create-measurement.dto';
 import { UpdateMeasurementDto } from './dto/update-measurement.dto';
 import { ClothingType } from './enums/clothing-type.enum';
@@ -22,6 +24,9 @@ export class MeasurementsService {
 
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+
+    @InjectModel(GarmentType.name)
+    private readonly garmentTypeModel: Model<GarmentTypeDocument>,
   ) {}
 
   async createMeasurement(
@@ -30,11 +35,14 @@ export class MeasurementsService {
   ): Promise<MeasurementDocument> {
     try {
       await this.ensureCustomerExists(createMeasurementDto.customerId);
+      const garmentType = await this.findGarmentType(createMeasurementDto.garmentTypeId);
+      const clothingType = this.legacyClothingType(garmentType.code);
+      this.validateMeasurementValues(garmentType, createMeasurementDto.measurements);
 
       const latestMeasurement = await this.measurementModel
         .findOne({
           customerId: createMeasurementDto.customerId,
-          clothingType: createMeasurementDto.clothingType,
+          garmentTypeId: createMeasurementDto.garmentTypeId,
         })
         .sort({ version: -1 })
         .select({ version: 1 })
@@ -43,7 +51,8 @@ export class MeasurementsService {
 
       const measurement = new this.measurementModel({
         customerId: createMeasurementDto.customerId,
-        clothingType: createMeasurementDto.clothingType,
+        garmentTypeId: createMeasurementDto.garmentTypeId,
+        ...(clothingType ? { clothingType } : {}),
         version: (latestMeasurement?.version ?? 0) + 1,
         measurements: createMeasurementDto.measurements,
         fitPreference: createMeasurementDto.fitPreference,
@@ -71,6 +80,8 @@ export class MeasurementsService {
         throw new NotFoundException('Measurement not found');
       }
 
+      let garmentType = await this.findGarmentType(measurement.garmentTypeId);
+
       if (
         updateMeasurementDto.customerId !== undefined &&
         updateMeasurementDto.customerId !== measurement.customerId
@@ -83,11 +94,24 @@ export class MeasurementsService {
         measurement.clothingType = updateMeasurementDto.clothingType;
       }
 
+      if (updateMeasurementDto.garmentTypeId !== undefined) {
+        garmentType = await this.findGarmentType(updateMeasurementDto.garmentTypeId);
+        const clothingType = this.legacyClothingType(garmentType.code);
+        measurement.garmentTypeId = updateMeasurementDto.garmentTypeId;
+
+        if (clothingType) {
+          measurement.clothingType = clothingType;
+        } else {
+          measurement.clothingType = undefined;
+        }
+      }
+
       if (updateMeasurementDto.version !== undefined) {
         measurement.version = updateMeasurementDto.version;
       }
 
       if (updateMeasurementDto.measurements !== undefined) {
+        this.validateMeasurementValues(garmentType, updateMeasurementDto.measurements);
         measurement.set('measurements', updateMeasurementDto.measurements);
       }
 
@@ -179,6 +203,45 @@ export class MeasurementsService {
 
     if (!customerExists) {
       throw new NotFoundException('Customer not found');
+    }
+  }
+
+  private async findGarmentType(garmentTypeId: string): Promise<GarmentTypeDocument> {
+    const garmentType = await this.garmentTypeModel.findOne({ garmentTypeId }).exec();
+
+    if (!garmentType) {
+      throw new NotFoundException('Garment type not found');
+    }
+
+    return garmentType;
+  }
+
+  private legacyClothingType(code: string): ClothingType | undefined {
+    return Object.values(ClothingType).includes(code as ClothingType)
+      ? (code as ClothingType)
+      : undefined;
+  }
+
+  private validateMeasurementValues(
+    garmentType: GarmentTypeDocument,
+    measurements: Record<string, number>,
+  ): void {
+    const fields = new Map(garmentType.measurementFields.map((field) => [field.key, field]));
+
+    for (const [key, value] of Object.entries(measurements)) {
+      if (!fields.has(key)) {
+        throw new BadRequestException(`Unknown measurement field: ${key}`);
+      }
+
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new BadRequestException(`Invalid measurement value for field: ${key}`);
+      }
+    }
+
+    for (const field of garmentType.measurementFields) {
+      if (field.required && !Object.prototype.hasOwnProperty.call(measurements, field.key)) {
+        throw new BadRequestException(`Missing required measurement field: ${field.key}`);
+      }
     }
   }
 

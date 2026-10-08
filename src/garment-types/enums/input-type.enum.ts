@@ -1,0 +1,9 @@
+export enum InputType {
+  TEXT = 'TEXT',
+  NUMBER = 'NUMBER',
+  SINGLE_SELECT = 'SINGLE_SELECT',
+  /** @deprecated Use SINGLE_SELECT. */
+  SELECT = 'SINGLE_SELECT',
+  MULTI_SELECT = 'MULTI_SELECT',
+  BOOLEAN = 'BOOLEAN',
+}

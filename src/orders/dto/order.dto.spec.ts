@@ -16,6 +16,7 @@ describe('Order DTO validation', () => {
     items: [
       {
         clothingType: ClothingType.SHIRT,
+        garmentTypeId: 'GRT-000001',
         quantity: 1,
         unitPrice: 500,
         measurementId: '507f1f77bcf86cd799439011',
@@ -28,6 +29,15 @@ describe('Order DTO validation', () => {
 
   it('accepts a valid order and nested item', async () => {
     await expect(validate(plainToInstance(CreateOrderDto, validOrder()))).resolves.toHaveLength(0);
+  });
+
+  it('rejects an invalid garment type reference', async () => {
+    const value = validOrder();
+    value.items[0].garmentTypeId = 'GARMENT-1';
+    const errors = await validate(plainToInstance(CreateOrderDto, value));
+    const itemErrors = errors.find((error) => error.property === 'items')?.children?.[0]?.children;
+
+    expect(itemErrors?.map((error) => error.property)).toContain('garmentTypeId');
   });
 
   it('rejects missing required fields and empty items', async () => {

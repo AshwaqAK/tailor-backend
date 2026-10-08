@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   Validate,
@@ -21,8 +22,16 @@ export class CreateMeasurementDto {
   @IsNotEmpty()
   customerId!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^GRT-\d{6}$/, {
+    message: 'garmentTypeId must be a valid garment type ID',
+  })
+  garmentTypeId!: string;
+
+  @IsOptional()
   @IsEnum(ClothingType)
-  clothingType!: ClothingType;
+  clothingType?: ClothingType;
 
   @IsInt()
   @Min(1)

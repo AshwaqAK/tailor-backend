@@ -4,6 +4,10 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { Connection, Model } from 'mongoose';
 
 import type { CustomerDocument } from '../customers/schemas/customer.schema';
+import type { GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
+import { GarmentTypePricingService } from '../garment-types/garment-type-pricing.service';
+import { InputType } from '../garment-types/enums/input-type.enum';
+import { PricingType } from '../garment-types/enums/pricing-type.enum';
 import type { FabricsService } from '../fabrics/fabrics.service';
 import { FabricType } from '../fabrics/enums/fabric-type.enum';
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
@@ -47,8 +51,10 @@ describe('OrdersService', () => {
   let customerModel: { exists: jest.Mock };
   let measurementModel: { findById: jest.Mock };
   let counterModel: { findOneAndUpdate: jest.Mock };
+  let garmentTypeModel: { findOne: jest.Mock };
   let fabricsService: { deductStock: jest.Mock };
   let servicesService: { findActiveByIds: jest.Mock };
+  let garmentTypePricingService: { calculateTailoringPricing: jest.Mock };
   let service: OrdersService;
 
   const createOrderDocument = (overrides: Partial<OrderDocument> = {}) => {
@@ -75,6 +81,7 @@ describe('OrdersService', () => {
     const item = {
       orderId: 'ORD-000007',
       clothingType: ClothingType.SHIRT,
+      garmentTypeId: 'GRT-000001',
       quantity: 1,
       unitPrice: 500,
       save,
@@ -84,10 +91,11 @@ describe('OrdersService', () => {
     return { item, save };
   };
 
-  const measurement = {
+    const measurement = {
     _id: measurementId,
     customerId: 'CUS-000001',
     clothingType: ClothingType.SHIRT,
+    garmentTypeId: 'GRT-000001',
     version: 2,
     measurements: new Map([
       ['chest', 40],
@@ -104,6 +112,7 @@ describe('OrdersService', () => {
     items: [
       {
         clothingType: ClothingType.SHIRT,
+        garmentTypeId: 'GRT-000001',
         quantity: 3,
         unitPrice: 500,
         measurementId,
@@ -127,8 +136,33 @@ describe('OrdersService', () => {
     customerModel = { exists: jest.fn() };
     measurementModel = { findById: jest.fn() };
     counterModel = { findOneAndUpdate: jest.fn() };
+    garmentTypeModel = { findOne: jest.fn() };
     fabricsService = { deductStock: jest.fn() };
     servicesService = { findActiveByIds: jest.fn() };
+    garmentTypePricingService = {
+      calculateTailoringPricing: jest.fn().mockReturnValue({
+        baseTailoringPrice: 485,
+        customizationGroups: [
+          {
+            groupName: 'Embroidery',
+            options: [
+              {
+                optionName: 'Stitches',
+                pricingType: PricingType.PER_UNIT,
+                configuredPrice: 5,
+                submittedValue: 3,
+                calculatedCharge: 15,
+              },
+            ],
+            calculatedCharge: 15,
+          },
+        ],
+        calculatedCustomizationCharge: 15,
+        calculatedPerGarmentTailoringAmount: 500,
+        quantity: 3,
+        finalTailoringTotal: 1500,
+      }),
+    };
     service = new OrdersService(
       { startSession: jest.fn().mockResolvedValue(session) } as unknown as Connection,
       orderModel as unknown as Model<OrderDocument>,
@@ -136,8 +170,10 @@ describe('OrdersService', () => {
       customerModel as unknown as Model<CustomerDocument>,
       measurementModel as unknown as Model<MeasurementDocument>,
       counterModel as unknown as Model<CounterDocument>,
+      garmentTypeModel as unknown as Model<GarmentTypeDocument>,
       fabricsService as unknown as FabricsService,
       servicesService as unknown as ServicesService,
+      garmentTypePricingService as unknown as GarmentTypePricingService,
     );
   });
 
@@ -148,6 +184,16 @@ describe('OrdersService', () => {
   const mockCustomerExists = () => {
     customerModel.exists.mockReturnValue({
       session: () => ({ exec: jest.fn().mockResolvedValue({ _id: 'customer-id' }) }),
+    });
+    garmentTypeModel.findOne.mockReturnValue({
+      session: () => ({
+        exec: jest.fn().mockResolvedValue({
+          _id: 'garment-type-id',
+          garmentTypeId: 'GRT-000001',
+          name: 'Shirt',
+          code: ClothingType.SHIRT,
+        }),
+      }),
     });
   };
 
@@ -183,8 +229,17 @@ describe('OrdersService', () => {
       return Object.assign(item, data);
     });
 
-    const result = await service.createOrder(validDto(), 'USR-000009');
+    const dto = validDto();
+    dto.items[0].clothingType = ClothingType.KURTA;
+    dto.items[0].unitPrice = 999;
+    dto.items[0].customizations = { Embroidery: 3 };
+    const result = await service.createOrder(dto, 'USR-000009');
 
+    expect(garmentTypePricingService.calculateTailoringPricing).toHaveBeenCalledWith(
+      expect.objectContaining({ code: ClothingType.SHIRT }),
+      { Embroidery: 3 },
+      3,
+    );
     expect(counterModel.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: 'order' },
       { $inc: { sequence: 1 } },
@@ -212,6 +267,34 @@ describe('OrdersService', () => {
     expect(orderItemModel).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: 'ORD-000007',
+        garmentTypeId: 'GRT-000001',
+        clothingType: ClothingType.SHIRT,
+        unitPrice: 500,
+        customizations: { Embroidery: 3 },
+        tailoringPricingSnapshot: {
+          garmentTypeName: 'Shirt',
+          garmentTypeCode: ClothingType.SHIRT,
+          baseTailoringPrice: 485,
+          customizationGroups: [
+            {
+              groupName: 'Embroidery',
+              options: [
+                {
+                  optionName: 'Stitches',
+                  pricingType: PricingType.PER_UNIT,
+                  configuredPrice: 5,
+                  submittedValue: 3,
+                  calculatedCharge: 15,
+                },
+              ],
+              calculatedCharge: 15,
+            },
+          ],
+          calculatedCustomizationCharge: 15,
+          calculatedPerGarmentTailoringAmount: 500,
+          quantity: 3,
+          finalTailoringTotal: 1500,
+        },
         measurementVersion: 2,
         serviceSnapshot: {
           serviceId: 'SRV-000001',
@@ -225,6 +308,7 @@ describe('OrdersService', () => {
     const itemInput = capturedItemInput as {
       measurementSnapshot: {
         customerId: string;
+        garmentTypeId: string;
         measurements: Map<string, number>;
       };
       fabricSnapshot: {
@@ -234,6 +318,7 @@ describe('OrdersService', () => {
       };
     };
     expect(itemInput.measurementSnapshot.customerId).toBe('CUS-000001');
+    expect(itemInput.measurementSnapshot.garmentTypeId).toBe('GRT-000001');
     expect(itemInput.measurementSnapshot.measurements).toEqual(
       new Map([
         ['chest', 40],
@@ -259,6 +344,115 @@ describe('OrdersService', () => {
     ).rejects.toThrow(new BadRequestException('At least one order item is required'));
     expect(session.abortTransaction).toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
+  });
+
+  it('supports a newly configured garment through measurement, pricing, and snapshot creation', async () => {
+    const garmentType = {
+      _id: 'garment-type-object-id',
+      garmentTypeId: 'GRT-000008',
+      name: 'Sherwani',
+      code: 'SHERWANI',
+      tailoringService: { serviceId: 'TAILORING', basePrice: 700 },
+      customizationGroups: [
+        {
+          name: 'Collar',
+          sortOrder: 0,
+          options: [
+            {
+              name: 'Mandarin',
+              inputType: InputType.SINGLE_SELECT,
+              price: 50,
+              pricingType: PricingType.FIXED,
+              sortOrder: 0,
+            },
+          ],
+        },
+      ],
+      measurementFields: [
+        {
+          key: 'chest',
+          name: 'Chest',
+          unit: 'INCH',
+          required: true,
+          sortOrder: 0,
+        },
+      ],
+    };
+    mockCustomerExists();
+    garmentTypeModel.findOne.mockReturnValue({
+      session: () => ({ exec: jest.fn().mockResolvedValue(garmentType) }),
+    });
+    mockMeasurement({
+      ...measurement,
+      garmentTypeId: 'GRT-000008',
+      clothingType: undefined,
+      measurements: new Map([['chest', 40]]),
+    } as MeasurementDocument);
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    garmentTypePricingService.calculateTailoringPricing.mockImplementation(
+      (configuration, selections, quantity) =>
+        new GarmentTypePricingService().calculateTailoringPricing(
+          configuration,
+          selections,
+          quantity,
+        ),
+    );
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 8 }),
+    });
+    const { order } = createOrderDocument();
+    const { item } = createOrderItemDocument({ clothingType: undefined });
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => Object.assign(item, data));
+
+    const dto = validDto();
+    dto.items[0].garmentTypeId = 'GRT-000008';
+    delete dto.items[0].clothingType;
+    dto.items[0].quantity = 2;
+    dto.items[0].unitPrice = 1;
+    dto.items[0].customizations = { Collar: 'Mandarin' };
+    delete (dto.items[0] as { serviceId?: string }).serviceId;
+    delete (dto.items[0] as { fabricId?: string; fabricQuantity?: number }).fabricId;
+    delete (dto.items[0] as { fabricQuantity?: number }).fabricQuantity;
+
+    const result = await service.createOrder(dto, 'USR-000009');
+
+    expect(result.items[0]).toMatchObject({
+      garmentTypeId: 'GRT-000008',
+      clothingType: undefined,
+      unitPrice: 750,
+      tailoringPricingSnapshot: {
+        garmentTypeName: 'Sherwani',
+        garmentTypeCode: 'SHERWANI',
+        baseTailoringPrice: 700,
+        calculatedCustomizationCharge: 50,
+        calculatedPerGarmentTailoringAmount: 750,
+        quantity: 2,
+        finalTailoringTotal: 1500,
+      },
+    });
+    expect(order.totalAmount).toBe(1500);
+  });
+
+  it('rejects invalid customization selections from the pricing engine', async () => {
+    mockCustomerExists();
+    mockMeasurement();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 7 }),
+    });
+    garmentTypePricingService.calculateTailoringPricing.mockImplementation(() => {
+      throw new BadRequestException('Unknown customization option: Invalid in group Collar');
+    });
+    const dto = validDto();
+    delete (dto.items[0] as { serviceId?: string }).serviceId;
+    delete (dto.items[0] as { fabricId?: string; fabricQuantity?: number }).fabricId;
+    delete (dto.items[0] as { fabricQuantity?: number }).fabricQuantity;
+
+    await expect(service.createOrder(dto, 'USR-000001')).rejects.toThrow(
+      new BadRequestException('Unknown customization option: Invalid in group Collar'),
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
   });
 
   it.each([0, -1, 1.5])('rejects invalid item quantity %s', async (quantity) => {

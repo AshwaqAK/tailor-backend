@@ -1,11 +1,18 @@
 /// <reference types="jest" />
 
-import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Model } from 'mongoose';
 
 import type { CustomerDocument } from '../customers/schemas/customer.schema';
+import type { GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
 import { ClothingType } from './enums/clothing-type.enum';
 import { FitPreference } from './enums/fit-preference.enum';
+import { MeasurementUnit } from '../garment-types/enums/measurement-unit.enum';
 import type { MeasurementDocument } from './schemas/measurement.schema';
 import { MeasurementsService } from './measurements.service';
 
@@ -24,6 +31,7 @@ describe('MeasurementsService', () => {
     find: jest.Mock;
   };
   let customerModel: { exists: jest.Mock };
+  let garmentTypeModel: { findOne: jest.Mock };
   let service: MeasurementsService;
 
   const createMeasurementDocument = (overrides: Partial<MeasurementDocument> = {}) => {
@@ -35,6 +43,7 @@ describe('MeasurementsService', () => {
       _id: { toString: () => 'measurement-object-id' },
       customerId: 'CUS-000001',
       clothingType: ClothingType.SHIRT,
+      garmentTypeId: 'GRT-000001',
       version: 1,
       measurements: new Map([['chest', 40]]),
       fitPreference: FitPreference.REGULAR,
@@ -57,9 +66,21 @@ describe('MeasurementsService', () => {
       find: jest.fn(),
     });
     customerModel = { exists: jest.fn() };
+    garmentTypeModel = { findOne: jest.fn() };
+    garmentTypeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        garmentTypeId: 'GRT-000001',
+        code: ClothingType.SHIRT,
+        measurementFields: [
+          { key: 'chest', name: 'Chest', unit: MeasurementUnit.INCH, required: true },
+          { key: 'waist', name: 'Waist', unit: MeasurementUnit.INCH, required: false },
+        ],
+      }),
+    });
     service = new MeasurementsService(
       measurementModel as unknown as Model<MeasurementDocument>,
       customerModel as unknown as Model<CustomerDocument>,
+      garmentTypeModel as unknown as Model<GarmentTypeDocument>,
     );
   });
 
@@ -83,6 +104,7 @@ describe('MeasurementsService', () => {
     const dto = {
       customerId: 'CUS-000001',
       clothingType: ClothingType.SHIRT,
+      garmentTypeId: 'GRT-000001',
       measurements: { chest: 40, waist: 36 },
       fitPreference: FitPreference.REGULAR,
       measuredAt,
@@ -103,6 +125,214 @@ describe('MeasurementsService', () => {
     expect(result.createdBy).toBe('USR-000009');
   });
 
+  it('creates a measurement with an existing garment type reference', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+    garmentTypeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        garmentTypeId: 'GRT-000001',
+        code: ClothingType.SHIRT,
+        measurementFields: [
+          { key: 'chest', name: 'Chest', unit: MeasurementUnit.INCH, required: true },
+        ],
+      }),
+    });
+    measurementModel.findOne.mockReturnValue({
+      sort: () => ({
+        select: () => ({
+          lean: () => ({ exec: jest.fn().mockResolvedValue(null) }),
+        }),
+      }),
+    });
+    const { measurement } = createMeasurementDocument();
+    measurementModel.mockImplementation((data: Record<string, unknown>) =>
+      Object.assign(measurement, data),
+    );
+
+    await service.createMeasurement(
+      {
+        customerId: 'CUS-000001',
+        clothingType: ClothingType.SHIRT,
+        garmentTypeId: 'GRT-000001',
+        measurements: { chest: 40 },
+        measuredAt,
+      },
+      'USR-000001',
+    );
+
+    expect(garmentTypeModel.findOne).toHaveBeenCalledWith({ garmentTypeId: 'GRT-000001' });
+    expect(measurement.garmentTypeId).toBe('GRT-000001');
+    expect(measurement.clothingType).toBe(ClothingType.SHIRT);
+  });
+
+  it('uses a new garment type code without rejecting it as a legacy clothing type', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+    garmentTypeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        garmentTypeId: 'GRT-000008',
+        code: 'SHERWANI',
+        measurementFields: [
+          { key: 'chest', name: 'Chest', unit: MeasurementUnit.INCH, required: true },
+        ],
+      }),
+    });
+    measurementModel.findOne.mockReturnValue({
+      sort: () => ({
+        select: () => ({
+          lean: () => ({ exec: jest.fn().mockResolvedValue(null) }),
+        }),
+      }),
+    });
+    const { measurement } = createMeasurementDocument();
+    let capturedData: Record<string, unknown> | undefined;
+    measurementModel.mockImplementation((data: Record<string, unknown>) =>
+      ((capturedData = data), Object.assign(measurement, data)),
+    );
+
+    await service.createMeasurement(
+      {
+        customerId: 'CUS-000001',
+        garmentTypeId: 'GRT-000008',
+        measurements: { chest: 40 },
+        measuredAt,
+      },
+      'USR-000001',
+    );
+
+    expect(measurementModel.findOne).toHaveBeenCalledWith({
+      customerId: 'CUS-000001',
+      garmentTypeId: 'GRT-000008',
+    });
+    expect(measurement.garmentTypeId).toBe('GRT-000008');
+    expect(capturedData).not.toHaveProperty('clothingType');
+  });
+
+  it('rejects an unknown configured measurement field', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+
+    await expect(
+      service.createMeasurement(
+        {
+          customerId: 'CUS-000001',
+          garmentTypeId: 'GRT-000001',
+          measurements: { chest: 40, sleeve: 25 },
+          measuredAt,
+        },
+        'USR-000001',
+      ),
+    ).rejects.toThrow(new BadRequestException('Unknown measurement field: sleeve'));
+  });
+
+  it('rejects a missing required measurement field', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+
+    await expect(
+      service.createMeasurement(
+        {
+          customerId: 'CUS-000001',
+          garmentTypeId: 'GRT-000001',
+          measurements: {},
+          measuredAt,
+        },
+        'USR-000001',
+      ),
+    ).rejects.toThrow(new BadRequestException('Missing required measurement field: chest'));
+  });
+
+  it('rejects a non-numeric measurement value', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+
+    await expect(
+      service.createMeasurement(
+        {
+          customerId: 'CUS-000001',
+          garmentTypeId: 'GRT-000001',
+          measurements: { chest: Number.NaN },
+          measuredAt,
+        },
+        'USR-000001',
+      ),
+    ).rejects.toThrow(new BadRequestException('Invalid measurement value for field: chest'));
+  });
+
+  it('versions measurements independently for each garment type', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+    garmentTypeModel.findOne.mockImplementation(({ garmentTypeId }: { garmentTypeId: string }) => ({
+      exec: jest.fn().mockResolvedValue({
+        garmentTypeId,
+        code: garmentTypeId === 'GRT-000008' ? 'SHERWANI' : ClothingType.SHIRT,
+        measurementFields: [
+          { key: 'chest', name: 'Chest', unit: MeasurementUnit.INCH, required: true },
+        ],
+      }),
+    }));
+    measurementModel.findOne.mockImplementation(
+      ({ garmentTypeId }: { garmentTypeId: string }) => ({
+        sort: () => ({
+          select: () => ({
+            lean: () => ({
+              exec: jest.fn().mockResolvedValue(
+                garmentTypeId === 'GRT-000001' ? { version: 2 } : null,
+              ),
+            }),
+          }),
+        }),
+      }),
+    );
+    const documents: Record<string, unknown>[] = [];
+    measurementModel.mockImplementation((data: Record<string, unknown>) => {
+      documents.push(data);
+      return { ...data, save: jest.fn().mockResolvedValue(data) };
+    });
+
+    await service.createMeasurement(
+      {
+        customerId: 'CUS-000001',
+        garmentTypeId: 'GRT-000001',
+        measurements: { chest: 40 },
+        measuredAt,
+      },
+      'USR-000001',
+    );
+    await service.createMeasurement(
+      {
+        customerId: 'CUS-000001',
+        garmentTypeId: 'GRT-000008',
+        measurements: { chest: 40 },
+        measuredAt,
+      },
+      'USR-000001',
+    );
+
+    expect(measurementModel.findOne).toHaveBeenNthCalledWith(1, {
+      customerId: 'CUS-000001',
+      garmentTypeId: 'GRT-000001',
+    });
+    expect(measurementModel.findOne).toHaveBeenNthCalledWith(2, {
+      customerId: 'CUS-000001',
+      garmentTypeId: 'GRT-000008',
+    });
+    expect(documents.map((document) => document.version)).toEqual([3, 1]);
+  });
+
+  it('rejects a measurement with a missing garment type reference', async () => {
+    customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
+    garmentTypeModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(null) });
+
+    await expect(
+      service.createMeasurement(
+        {
+        customerId: 'CUS-000001',
+        clothingType: ClothingType.SHIRT,
+          garmentTypeId: 'GRT-999999',
+          measurements: { chest: 40 },
+          measuredAt,
+        },
+        'USR-000001',
+      ),
+    ).rejects.toThrow(new NotFoundException('Garment type not found'));
+    expect(measurementModel).not.toHaveBeenCalled();
+  });
+
   it('starts measurement versions at one', async () => {
     customerModel.exists.mockResolvedValue({ _id: 'customer-object-id' });
     measurementModel.findOne.mockReturnValue({
@@ -121,6 +351,7 @@ describe('MeasurementsService', () => {
       {
         customerId: 'CUS-000001',
         clothingType: ClothingType.KURTA,
+        garmentTypeId: 'GRT-000002',
         measurements: { chest: 40 },
         measuredAt,
       },
@@ -191,8 +422,9 @@ describe('MeasurementsService', () => {
     await expect(
       service.createMeasurement(
         {
-          customerId: 'CUS-999999',
-          clothingType: ClothingType.SHIRT,
+        customerId: 'CUS-999999',
+        clothingType: ClothingType.SHIRT,
+        garmentTypeId: 'GRT-000001',
           measurements: { chest: 40 },
           measuredAt,
         },
@@ -260,6 +492,7 @@ describe('MeasurementsService', () => {
         {
           customerId: 'CUS-000001',
           clothingType: ClothingType.SHIRT,
+          garmentTypeId: 'GRT-000001',
           measurements: { chest: 40 },
           measuredAt,
         },

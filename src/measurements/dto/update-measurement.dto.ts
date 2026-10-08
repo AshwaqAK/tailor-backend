@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   Validate,
@@ -25,6 +26,13 @@ export class UpdateMeasurementDto {
   @IsOptional()
   @IsEnum(ClothingType)
   clothingType?: ClothingType;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^GRT-\d{6}$/, {
+    message: 'garmentTypeId must be a valid garment type ID',
+  })
+  garmentTypeId?: string;
 
   @IsOptional()
   @IsInt()

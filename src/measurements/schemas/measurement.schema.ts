@@ -25,9 +25,16 @@ export class Measurement {
   @Prop({
     type: String,
     enum: ClothingType,
-    required: true,
   })
-  clothingType!: ClothingType;
+  clothingType?: ClothingType;
+
+  @Prop({
+    type: String,
+    ref: 'GarmentType',
+    required: true,
+    trim: true,
+  })
+  garmentTypeId!: string;
 
   @Prop({
     required: true,
@@ -81,7 +88,7 @@ export const MeasurementSchema = SchemaFactory.createForClass(Measurement);
 MeasurementSchema.index(
   {
     customerId: 1,
-    clothingType: 1,
+    garmentTypeId: 1,
     version: 1,
   },
   {
@@ -91,6 +98,6 @@ MeasurementSchema.index(
 
 MeasurementSchema.index({
   customerId: 1,
-  clothingType: 1,
+  garmentTypeId: 1,
   version: -1,
 });

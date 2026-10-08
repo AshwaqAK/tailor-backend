@@ -12,7 +12,10 @@ import { ClientSession, Connection, Model } from 'mongoose';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { FabricsService } from '../fabrics/fabrics.service';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
+import { GarmentType, GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
+import { GarmentTypePricingService } from '../garment-types/garment-type-pricing.service';
 import { Measurement, MeasurementDocument } from '../measurements/schemas/measurement.schema';
+import { ClothingType } from '../measurements/enums/clothing-type.enum';
 import { ServicesService } from '../services/services.service';
 import type { TailoringServiceDocument } from '../services/schemas/tailoring-service.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
@@ -78,8 +81,12 @@ export class OrdersService {
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
 
+    @InjectModel(GarmentType.name)
+    private readonly garmentTypeModel: Model<GarmentTypeDocument>,
+
     private readonly fabricsService: FabricsService,
     private readonly servicesService: ServicesService,
+    private readonly garmentTypePricingService: GarmentTypePricingService,
   ) {}
 
   async createOrder(createOrderDto: CreateOrderDto, userId: string): Promise<CreateOrderResult> {
@@ -105,6 +112,25 @@ export class OrdersService {
 
       if (!customerExists) {
         throw new NotFoundException('Customer not found');
+      }
+
+      const garmentTypesById = new Map<string, GarmentTypeDocument>();
+
+      for (const item of createOrderDto.items) {
+        if (garmentTypesById.has(item.garmentTypeId)) {
+          continue;
+        }
+
+        const garmentType = await this.garmentTypeModel
+          .findOne({ garmentTypeId: item.garmentTypeId })
+          .session(session)
+          .exec();
+
+        if (!garmentType) {
+          throw new NotFoundException(`Garment type ${item.garmentTypeId} not found`);
+        }
+
+        garmentTypesById.set(item.garmentTypeId, garmentType);
       }
 
       const serviceIds = createOrderDto.items.flatMap((item) =>
@@ -167,11 +193,19 @@ export class OrdersService {
           throw new BadRequestException('Measurement does not belong to the requested customer');
         }
 
-        if (measurement.clothingType !== itemDto.clothingType) {
+        if (measurement.garmentTypeId !== itemDto.garmentTypeId) {
           throw new BadRequestException(
-            'Measurement clothing type does not match the order item clothing type',
+            'Measurement garment type does not match the order item garment type',
           );
         }
+
+        const garmentType = garmentTypesById.get(itemDto.garmentTypeId)!;
+        const clothingType = this.legacyClothingType(garmentType.code);
+        const tailoringPricing = this.garmentTypePricingService.calculateTailoringPricing(
+          garmentType,
+          itemDto.customizations,
+          itemDto.quantity,
+        );
 
         const tailoringService = itemDto.serviceId
           ? servicesById.get(itemDto.serviceId)
@@ -182,16 +216,24 @@ export class OrdersService {
         const fabric = itemDto.fabricId ? fabricsById.get(itemDto.fabricId) : undefined;
         const measurementValues = new Map<string, number>(measurement.measurements);
         const orderItem = new this.orderItemModel({
-          orderId,
-          clothingType: itemDto.clothingType,
+            orderId,
+          garmentTypeId: itemDto.garmentTypeId,
+          ...(clothingType ? { clothingType } : {}),
           quantity: itemDto.quantity,
-          unitPrice: itemDto.unitPrice,
+          unitPrice: tailoringPricing.calculatedPerGarmentTailoringAmount,
+          customizations: itemDto.customizations,
+          tailoringPricingSnapshot: {
+            garmentTypeName: garmentType.name,
+            garmentTypeCode: garmentType.code,
+            ...tailoringPricing,
+          },
           measurementVersion: measurement.version,
           measurementSnapshot: {
             customerId: measurement.customerId,
             measurementId: measurement._id,
             measurementVersion: measurement.version,
-            clothingType: measurement.clothingType,
+            garmentTypeId: measurement.garmentTypeId,
+            ...(measurement.clothingType ? { clothingType: measurement.clothingType } : {}),
             measurements: measurementValues,
             fitPreference: measurement.fitPreference,
             notes: measurement.notes,
@@ -225,7 +267,7 @@ export class OrdersService {
       }
 
       const totalAmount = this.calculateOrderTotal(
-        createOrderDto.items,
+        orderItems,
         fabricQuantities,
         fabricsById,
       );
@@ -429,8 +471,14 @@ export class OrdersService {
     return Number(lineAmount.toFixed(2));
   }
 
+  private legacyClothingType(code: string): ClothingType | undefined {
+    return Object.values(ClothingType).includes(code as ClothingType)
+      ? (code as ClothingType)
+      : undefined;
+  }
+
   private calculateOrderTotal(
-    items: CreateOrderDto['items'],
+    items: Pick<OrderItemDocument, 'unitPrice' | 'quantity'>[],
     fabricQuantities: ReadonlyMap<string, number>,
     fabricsById: ReadonlyMap<string, FabricDocument>,
   ): number {

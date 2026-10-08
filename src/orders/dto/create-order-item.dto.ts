@@ -1,6 +1,7 @@
 import {
   IsEnum,
   IsInt,
+  IsObject,
   IsMongoId,
   IsNumber,
   IsOptional,
@@ -14,8 +15,15 @@ import {
 import { ClothingType } from '../../measurements/enums/clothing-type.enum';
 
 export class CreateOrderItemDto {
+  @IsString()
+  @Matches(/^GRT-\d{6}$/, {
+    message: 'garmentTypeId must be a valid garment type ID',
+  })
+  garmentTypeId!: string;
+
+  @IsOptional()
   @IsEnum(ClothingType)
-  clothingType!: ClothingType;
+  clothingType?: ClothingType;
 
   @IsInt()
   @Min(1)
@@ -24,6 +32,10 @@ export class CreateOrderItemDto {
   @IsNumber()
   @Min(0)
   unitPrice!: number;
+
+  @IsOptional()
+  @IsObject()
+  customizations?: Record<string, unknown>;
 
   @IsMongoId()
   measurementId!: string;
