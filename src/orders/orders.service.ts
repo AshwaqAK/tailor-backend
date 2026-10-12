@@ -21,6 +21,7 @@ import type { TailoringServiceDocument } from '../services/schemas/tailoring-ser
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderListQueryDto } from './dto/order-list-query.dto';
+import { PricingPreviewDto } from './dto/pricing-preview.dto';
 import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import { OrderItem, OrderItemDocument } from './schemas/order-item.schema';
@@ -44,6 +45,12 @@ export interface CursorPaginatedOrders {
     hasNextPage: boolean;
     nextCursor: string | null;
   };
+}
+
+export interface PricingPreviewResult extends ReturnType<
+  GarmentTypePricingService['calculateTailoringPricing']
+> {
+  garmentTypeId: string;
 }
 
 type OrderCursor = {
@@ -88,6 +95,25 @@ export class OrdersService {
     private readonly servicesService: ServicesService,
     private readonly garmentTypePricingService: GarmentTypePricingService,
   ) {}
+
+  async previewPricing(dto: PricingPreviewDto): Promise<PricingPreviewResult> {
+    const garmentType = await this.garmentTypeModel
+      .findOne({ garmentTypeId: dto.garmentTypeId })
+      .exec();
+
+    if (!garmentType) {
+      throw new NotFoundException(`Garment type ${dto.garmentTypeId} not found`);
+    }
+
+    return {
+      garmentTypeId: dto.garmentTypeId,
+      ...this.garmentTypePricingService.calculateTailoringPricing(
+        garmentType,
+        dto.customizations,
+        dto.quantity,
+      ),
+    };
+  }
 
   async createOrder(createOrderDto: CreateOrderDto, userId: string): Promise<CreateOrderResult> {
     const session = await this.connection.startSession();

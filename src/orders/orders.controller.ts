@@ -10,6 +10,7 @@ import { CustomerIdParamDto } from './dto/customer-id-param.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderListQueryDto } from './dto/order-list-query.dto';
 import { OrderIdParamDto } from './dto/order-id-param.dto';
+import { PricingPreviewDto } from './dto/pricing-preview.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrdersService } from './orders.service';
 
@@ -17,6 +18,12 @@ import { OrdersService } from './orders.service';
 @UseGuards(AccessTokenGuard, RolesGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
+
+  @Post('pricing-preview')
+  @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST, Role.TAILOR)
+  previewPricing(@Body() pricingPreviewDto: PricingPreviewDto) {
+    return this.ordersService.previewPricing(pricingPreviewDto);
+  }
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.MANAGER, Role.RECEPTIONIST)

@@ -181,6 +181,105 @@ describe('OrdersService', () => {
     jest.clearAllMocks();
   });
 
+  const previewGarmentType = {
+    garmentTypeId: 'GRT-000001',
+    tailoringService: { serviceId: 'TAILORING', basePrice: 485 },
+    customizationGroups: [
+      {
+        name: 'Collar',
+        sortOrder: 0,
+        options: [
+          {
+            name: 'Spread',
+            inputType: InputType.SINGLE_SELECT,
+            price: 25,
+            pricingType: PricingType.FIXED,
+            sortOrder: 0,
+          },
+        ],
+      },
+    ],
+  };
+
+  const mockPreviewGarmentType = () => {
+    garmentTypeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(previewGarmentType),
+    });
+    garmentTypePricingService.calculateTailoringPricing.mockImplementation(
+      (configuration, selections, quantity) =>
+        new GarmentTypePricingService().calculateTailoringPricing(
+          configuration,
+          selections,
+          quantity,
+        ),
+    );
+  };
+
+  it('returns a stored garment quote with customization breakdown and quantity total', async () => {
+    mockPreviewGarmentType();
+
+    await expect(
+      service.previewPricing({
+        garmentTypeId: 'GRT-000001',
+        quantity: 3,
+        customizations: { Collar: 'Spread' },
+      }),
+    ).resolves.toEqual({
+      garmentTypeId: 'GRT-000001',
+      baseTailoringPrice: 485,
+      customizationGroups: [
+        {
+          groupName: 'Collar',
+          options: [
+            {
+              optionName: 'Spread',
+              pricingType: PricingType.FIXED,
+              configuredPrice: 25,
+              calculatedCharge: 25,
+            },
+          ],
+          calculatedCharge: 25,
+        },
+      ],
+      calculatedCustomizationCharge: 25,
+      calculatedPerGarmentTailoringAmount: 510,
+      quantity: 3,
+      finalTailoringTotal: 1530,
+    });
+  });
+
+  it('rejects invalid preview selections through the pricing engine', async () => {
+    mockPreviewGarmentType();
+
+    await expect(
+      service.previewPricing({
+        garmentTypeId: 'GRT-000001',
+        quantity: 1,
+        customizations: { Collar: 'Mandarin' },
+      }),
+    ).rejects.toThrow(new BadRequestException('Unknown customization option: Mandarin in group Collar'));
+  });
+
+  it.each([0, -1, 1.5])('rejects invalid preview quantity %s', async (quantity) => {
+    mockPreviewGarmentType();
+
+    await expect(
+      service.previewPricing({ garmentTypeId: 'GRT-000001', quantity }),
+    ).rejects.toThrow(new BadRequestException('Garment quantity must be a positive integer'));
+  });
+
+  it('does not create or modify order records', async () => {
+    mockPreviewGarmentType();
+
+    await service.previewPricing({ garmentTypeId: 'GRT-000001', quantity: 1 });
+
+    expect(orderModel).not.toHaveBeenCalled();
+    expect(orderItemModel).not.toHaveBeenCalled();
+    expect(session.startTransaction).not.toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
+    expect(session.abortTransaction).not.toHaveBeenCalled();
+  });
+
   const mockCustomerExists = () => {
     customerModel.exists.mockReturnValue({
       session: () => ({ exec: jest.fn().mockResolvedValue({ _id: 'customer-id' }) }),
