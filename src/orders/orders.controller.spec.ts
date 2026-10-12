@@ -40,6 +40,20 @@ describe('OrdersController', () => {
     expect(createOrder).toHaveBeenCalledWith(dto, 'USR-000001');
   });
 
+  it('previews pricing without creating an order', async () => {
+    const previewPricing = jest.fn();
+    const controller = new OrdersController({ previewPricing } as unknown as OrdersService);
+    const dto = {
+      garmentTypeId: 'GRT-000001',
+      quantity: 2,
+      customizations: { Collar: 'Spread' },
+    };
+
+    await controller.previewPricing(dto);
+
+    expect(previewPricing).toHaveBeenCalledWith(dto);
+  });
+
   it('retrieves all orders', async () => {
     const getAllOrders = jest.fn();
     const controller = new OrdersController({ getAllOrders } as unknown as OrdersService);
