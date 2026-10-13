@@ -11,18 +11,32 @@ import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import { Fabric, FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { PaymentMethod } from '../payments/enums/payment-method.enum';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { ServiceCategory } from '../services/enums/service-category.enum';
 import {
   TailoringService,
   TailoringServiceDocument,
 } from '../services/schemas/tailoring-service.schema';
-import { parseReportDate, ReportDateQueryDto } from './dto/report-date-query.dto';
+import {
+  CustomerReportQueryDto,
+  FabricSalesReportQueryDto,
+  OrderReportQueryDto,
+  parseReportDate,
+  PaymentReportQueryDto,
+  ReportDateQueryDto,
+  ServiceUsageReportQueryDto,
+} from './dto/report-date-query.dto';
 import {
   AppointmentReport,
   CustomerReport,
   FabricReport,
+  FabricSalesReport,
   OrderReport,
+  PaymentReport,
   ServiceReport,
+  ServiceUsageReport,
 } from './types/reports.type';
 
 interface GroupedCount<T> {
@@ -46,6 +60,81 @@ interface ServiceReportAggregation {
   byCategory: GroupedCount<ServiceCategory>[];
 }
 
+type OrderComposition = 'TAILORING_ONLY' | 'FABRIC_SALE_ONLY' | 'MIXED';
+
+interface OrderReportAggregation {
+  statusCounts: GroupedCount<OrderStatus>[];
+  financial: Array<{
+    orderCount: number;
+    orderValue: number;
+    paidAmount: number;
+    outstandingBalance: number;
+  }>;
+  composition: Array<{
+    _id: OrderComposition;
+    orderCount: number;
+    tailoringAmount: number;
+    attachedFabricAmount: number;
+    fabricSaleAmount: number;
+  }>;
+}
+
+interface PaymentReportAggregation {
+  grossCollections: Array<{ total: number }>;
+  refunds: Array<{ total: number }>;
+  byStatus: GroupedCount<PaymentStatus>[];
+  byMethod: GroupedCount<PaymentMethod>[];
+}
+
+interface CustomerReportAggregation {
+  activity: GroupedCount<boolean>[];
+  commercialSummary: Array<{
+    customerOrderCount: number;
+    repeatCustomerCount: number;
+    orderValue: number;
+    currentPaidAmount: number;
+    currentOutstandingBalance: number;
+  }>;
+  customerBreakdown: Array<{
+    data: Array<{
+      customerId: string;
+      customerName: string | null;
+      orderCount: number;
+      orderValue: number;
+      currentPaidAmount: number;
+      currentOutstandingBalance: number;
+      latestOrderCreatedAt: Date;
+    }>;
+    meta: Array<{ total: number }>;
+  }>;
+}
+
+interface FabricSalesReportAggregation {
+  summary: Array<{
+    saleCount: number;
+    meterQuantity: number;
+    pieceQuantity: number;
+    salesAmount: number;
+    distinctFabricCount: number;
+  }>;
+  fabricBreakdown: Array<{
+    data: FabricSalesReport['fabricBreakdown']['data'];
+    meta: Array<{ total: number }>;
+  }>;
+}
+
+interface ServiceUsageReportAggregation {
+  summary: Array<{
+    serviceLineCount: number;
+    distinctServiceCount: number;
+    serviceAmount: number;
+  }>;
+  serviceBreakdown: Array<{
+    data: ServiceUsageReport['serviceBreakdown']['data'];
+    meta: Array<{ total: number }>;
+  }>;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -57,6 +146,9 @@ export class ReportsService {
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
 
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+
     @InjectModel(Appointment.name)
     private readonly appointmentModel: Model<AppointmentDocument>,
 
@@ -67,29 +159,237 @@ export class ReportsService {
     private readonly tailoringServiceModel: Model<TailoringServiceDocument>,
   ) {}
 
-  async getCustomerReport(query: ReportDateQueryDto): Promise<CustomerReport> {
+  async getCustomerReport(query: CustomerReportQueryDto): Promise<CustomerReport> {
     const activityCounts = await this.customerModel
       .aggregate<GroupedCount<boolean>>([
         ...this.buildDateMatchStages('createdAt', query),
+        ...(query.customerId ? [{ $match: { customerId: query.customerId } }] : []),
         { $group: { _id: '$isActive', count: { $sum: 1 } } },
       ])
       .exec();
     const activity = this.toActivityCounts(activityCounts);
     const totalCustomers = activity.active + activity.inactive;
 
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const [aggregation] = await this.orderModel
+      .aggregate<CustomerReportAggregation>([
+        {
+          $facet: {
+            commercialSummary: [
+              ...this.buildCustomerOrderMatchStages(query),
+              {
+                $group: {
+                  _id: '$customerId',
+                  orderCount: { $sum: 1 },
+                  orderValue: { $sum: '$totalAmount' },
+                  currentPaidAmount: { $sum: '$paidAmount' },
+                  currentOutstandingBalance: { $sum: '$balanceAmount' },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  customerOrderCount: { $sum: 1 },
+                  repeatCustomerCount: {
+                    $sum: { $cond: [{ $gte: ['$orderCount', 2] }, 1, 0] },
+                  },
+                  orderValue: { $sum: '$orderValue' },
+                  currentPaidAmount: { $sum: '$currentPaidAmount' },
+                  currentOutstandingBalance: { $sum: '$currentOutstandingBalance' },
+                },
+              },
+            ],
+            customerBreakdown: [
+              ...this.buildCustomerOrderMatchStages(query),
+              {
+                $group: {
+                  _id: '$customerId',
+                  orderCount: { $sum: 1 },
+                  orderValue: { $sum: '$totalAmount' },
+                  currentPaidAmount: { $sum: '$paidAmount' },
+                  currentOutstandingBalance: { $sum: '$balanceAmount' },
+                  latestOrderCreatedAt: { $max: '$createdAt' },
+                },
+              },
+              {
+                $lookup: {
+                  from: 'customers',
+                  localField: '_id',
+                  foreignField: 'customerId',
+                  as: 'customer',
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  customerId: '$_id',
+                  customerName: { $ifNull: [{ $arrayElemAt: ['$customer.name', 0] }, null] },
+                  orderCount: 1,
+                  orderValue: 1,
+                  currentPaidAmount: 1,
+                  currentOutstandingBalance: 1,
+                  latestOrderCreatedAt: 1,
+                },
+              },
+              { $sort: { orderValue: -1, customerId: 1 } },
+              {
+                $facet: {
+                  data: [{ $skip: skip }, { $limit: limit }],
+                  meta: [{ $count: 'total' }],
+                },
+              },
+            ],
+          },
+        },
+      ] as PipelineStage[])
+      .exec();
+
+    const commercialSummary = aggregation?.commercialSummary[0];
+    const breakdown = aggregation?.customerBreakdown[0];
+    const total = breakdown?.meta[0]?.total ?? 0;
+
     return {
       totalCustomers,
       activeCustomers: activity.active,
       inactiveCustomers: activity.inactive,
       registrationCount: totalCustomers,
+      customerOrderCount: commercialSummary?.customerOrderCount ?? 0,
+      repeatCustomerCount: commercialSummary?.repeatCustomerCount ?? 0,
+      orderValue: commercialSummary?.orderValue ?? 0,
+      currentPaidAmount: commercialSummary?.currentPaidAmount ?? 0,
+      currentOutstandingBalance: commercialSummary?.currentOutstandingBalance ?? 0,
+      customerBreakdown: {
+        data: breakdown?.data ?? [],
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        },
+      },
     };
   }
 
-  async getOrderReport(query: ReportDateQueryDto): Promise<OrderReport> {
-    const statusCounts = await this.orderModel
-      .aggregate<GroupedCount<OrderStatus>>([
-        ...this.buildDateMatchStages('createdAt', query),
-        { $group: { _id: '$status', count: { $sum: 1 } } },
+  async getOrderReport(query: OrderReportQueryDto): Promise<OrderReport> {
+    const [aggregation] = await this.orderModel
+      .aggregate<OrderReportAggregation>([
+        {
+          $facet: {
+            statusCounts: [
+              ...this.buildOrderMatchStages(query),
+              { $group: { _id: '$status', count: { $sum: 1 } } },
+            ],
+            financial: [
+              ...this.buildOrderMatchStages(query),
+              {
+                $group: {
+                  _id: null,
+                  orderCount: { $sum: 1 },
+                  orderValue: { $sum: '$totalAmount' },
+                  paidAmount: { $sum: '$paidAmount' },
+                  outstandingBalance: { $sum: '$balanceAmount' },
+                },
+              },
+            ],
+            composition: [
+              ...this.buildOrderMatchStages(query),
+              {
+                $lookup: {
+                  from: 'orderitems',
+                  localField: 'orderId',
+                  foreignField: 'orderId',
+                  as: 'items',
+                },
+              },
+              { $unwind: '$items' },
+              {
+                $group: {
+                  _id: '$_id',
+                  hasTailoring: {
+                    $max: {
+                      $cond: [{ $ne: ['$items.itemType', 'FABRIC_SALE'] }, 1, 0],
+                    },
+                  },
+                  hasFabricSale: {
+                    $max: {
+                      $cond: [{ $eq: ['$items.itemType', 'FABRIC_SALE'] }, 1, 0],
+                    },
+                  },
+                  tailoringAmount: {
+                    $sum: {
+                      $cond: [
+                        { $ne: ['$items.itemType', 'FABRIC_SALE'] },
+                        { $multiply: ['$items.unitPrice', '$items.quantity'] },
+                        0,
+                      ],
+                    },
+                  },
+                  attachedFabricAmount: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $ne: ['$items.itemType', 'FABRIC_SALE'] },
+                            { $ne: ['$items.fabricSnapshot', null] },
+                          ],
+                        },
+                        {
+                          $multiply: [
+                            '$items.fabricSnapshot.pricePerUnit',
+                            '$items.fabricSnapshot.quantityUsed',
+                          ],
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  fabricSaleAmount: {
+                    $sum: {
+                      $cond: [
+                        { $eq: ['$items.itemType', 'FABRIC_SALE'] },
+                        { $ifNull: ['$items.fabricSaleSnapshot.lineTotal', 0] },
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: {
+                    $switch: {
+                      branches: [
+                        {
+                          case: { $and: [{ $eq: ['$hasTailoring', 1] }, { $eq: ['$hasFabricSale', 0] }] },
+                          then: 'TAILORING_ONLY',
+                        },
+                        {
+                          case: { $and: [{ $eq: ['$hasTailoring', 0] }, { $eq: ['$hasFabricSale', 1] }] },
+                          then: 'FABRIC_SALE_ONLY',
+                        },
+                      ],
+                      default: 'MIXED',
+                    },
+                  },
+                  tailoringAmount: { $round: ['$tailoringAmount', 2] },
+                  attachedFabricAmount: { $round: ['$attachedFabricAmount', 2] },
+                  fabricSaleAmount: { $round: ['$fabricSaleAmount', 2] },
+                },
+              },
+              {
+                $group: {
+                  _id: '$_id',
+                  orderCount: { $sum: 1 },
+                  tailoringAmount: { $sum: '$tailoringAmount' },
+                  attachedFabricAmount: { $sum: '$attachedFabricAmount' },
+                  fabricSaleAmount: { $sum: '$fabricSaleAmount' },
+                },
+              },
+            ],
+          },
+        },
       ])
       .exec();
     const ordersByStatus: Record<OrderStatus, number> = {
@@ -101,8 +401,29 @@ export class ReportsService {
       [OrderStatus.CANCELLED]: 0,
     };
 
-    for (const result of statusCounts) {
+    for (const result of aggregation?.statusCounts ?? []) {
       ordersByStatus[result._id] = result.count;
+    }
+
+    const financial = aggregation?.financial[0];
+    const composition = {
+      tailoringOnly: 0,
+      fabricSaleOnly: 0,
+      mixed: 0,
+      amounts: {
+        tailoringAmount: 0,
+        attachedFabricAmount: 0,
+        fabricSaleAmount: 0,
+      },
+    };
+
+    for (const result of aggregation?.composition ?? []) {
+      if (result._id === 'TAILORING_ONLY') composition.tailoringOnly = result.orderCount;
+      if (result._id === 'FABRIC_SALE_ONLY') composition.fabricSaleOnly = result.orderCount;
+      if (result._id === 'MIXED') composition.mixed = result.orderCount;
+      composition.amounts.tailoringAmount += result.tailoringAmount;
+      composition.amounts.attachedFabricAmount += result.attachedFabricAmount;
+      composition.amounts.fabricSaleAmount += result.fabricSaleAmount;
     }
 
     return {
@@ -114,7 +435,140 @@ export class ReportsService {
         completed: ordersByStatus.DELIVERED,
         cancelled: ordersByStatus.CANCELLED,
       },
+      orderCount: financial?.orderCount ?? 0,
+      orderValue: financial?.orderValue ?? 0,
+      paidAmount: financial?.paidAmount ?? 0,
+      outstandingBalance: financial?.outstandingBalance ?? 0,
+      composition,
     };
+  }
+
+  private buildOrderMatchStages(query: OrderReportQueryDto): PipelineStage.Match[] {
+    const stages = this.buildDateMatchStages('createdAt', query);
+
+    if (query.customerId) {
+      stages.push({ $match: { customerId: query.customerId } });
+    }
+
+    return stages;
+  }
+
+  private buildCustomerOrderMatchStages(query: CustomerReportQueryDto): PipelineStage.Match[] {
+    const stages = this.buildDateMatchStages('createdAt', query);
+
+    if (query.customerId) {
+      stages.push({ $match: { customerId: query.customerId } });
+    }
+
+    return stages;
+  }
+
+  async getPaymentReport(query: PaymentReportQueryDto): Promise<PaymentReport> {
+    const [aggregation] = await this.paymentModel
+      .aggregate<PaymentReportAggregation>([
+        {
+          $facet: {
+            grossCollections: [
+              {
+                $match: {
+                  ...this.buildPaymentFilter(query, 'paidAt'),
+                  status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] },
+                },
+              },
+              { $group: { _id: null, total: { $sum: '$amount' } } },
+            ],
+            refunds: [
+              {
+                $match: {
+                  ...this.buildPaymentFilter(query, 'refundedAt'),
+                  status: PaymentStatus.REFUNDED,
+                },
+              },
+              { $group: { _id: null, total: { $sum: '$amount' } } },
+            ],
+            byStatus: [
+              { $match: this.buildPaymentFilter(query, 'paidAt') },
+              { $group: { _id: '$status', count: { $sum: 1 } } },
+            ],
+            byMethod: [
+              { $match: this.buildPaymentFilter(query, 'paidAt') },
+              { $group: { _id: '$paymentMethod', count: { $sum: 1 } } },
+            ],
+          },
+        },
+      ])
+      .exec();
+
+    const byStatus: Record<PaymentStatus, number> = {
+      [PaymentStatus.PENDING]: 0,
+      [PaymentStatus.SUCCESS]: 0,
+      [PaymentStatus.FAILED]: 0,
+      [PaymentStatus.REFUNDED]: 0,
+    };
+    for (const result of aggregation?.byStatus ?? []) {
+      byStatus[result._id] = result.count;
+    }
+
+    const byMethod: Record<PaymentMethod, number> = {
+      [PaymentMethod.CASH]: 0,
+      [PaymentMethod.CARD]: 0,
+      [PaymentMethod.UPI]: 0,
+      [PaymentMethod.BANK_TRANSFER]: 0,
+      [PaymentMethod.OTHER]: 0,
+    };
+    for (const result of aggregation?.byMethod ?? []) {
+      byMethod[result._id] = result.count;
+    }
+
+    const grossCollections = aggregation?.grossCollections[0]?.total ?? 0;
+    const refunds = aggregation?.refunds[0]?.total ?? 0;
+
+    return {
+      grossCollections,
+      refunds,
+      netCollections: Number((grossCollections - refunds).toFixed(2)),
+      paymentCounts: { byStatus, byMethod },
+    };
+  }
+
+  private buildPaymentFilter(
+    query: PaymentReportQueryDto,
+    dateField: 'paidAt' | 'refundedAt',
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown> = {};
+
+    if (query.customerId) {
+      filter.customerId = query.customerId;
+    }
+
+    if (query.paymentMethod) {
+      filter.paymentMethod = query.paymentMethod;
+    }
+
+    if (query.fromDate || query.toDate) {
+      const range: { $gte?: Date; $lt?: Date } = {};
+
+      if (query.fromDate) {
+        range.$gte = parseReportDate(query.fromDate);
+      }
+
+      if (query.toDate) {
+        const exclusiveUpperBoundary = parseReportDate(query.toDate);
+        const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(query.toDate);
+
+        if (isDateOnly) {
+          exclusiveUpperBoundary.setUTCDate(exclusiveUpperBoundary.getUTCDate() + 1);
+        } else {
+          exclusiveUpperBoundary.setTime(exclusiveUpperBoundary.getTime() + 1);
+        }
+
+        range.$lt = exclusiveUpperBoundary;
+      }
+
+      filter[dateField] = range;
+    }
+
+    return filter;
   }
 
   async getAppointmentReport(query: ReportDateQueryDto): Promise<AppointmentReport> {
@@ -214,6 +668,152 @@ export class ReportsService {
     };
   }
 
+  async getFabricSalesReport(
+    query: FabricSalesReportQueryDto,
+  ): Promise<FabricSalesReport> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const [aggregation] = await this.orderModel
+      .aggregate<FabricSalesReportAggregation>([
+        ...this.buildDateMatchStages('createdAt', query),
+        {
+          $lookup: {
+            from: 'orderitems',
+            localField: 'orderId',
+            foreignField: 'orderId',
+            as: 'items',
+          },
+        },
+        { $unwind: '$items' },
+        {
+          $match: {
+            'items.itemType': 'FABRIC_SALE',
+            ...(query.fabricId
+              ? { 'items.fabricSaleSnapshot.fabricId': query.fabricId }
+              : {}),
+          },
+        },
+        {
+          $facet: {
+            summary: [
+              {
+                $group: {
+                  _id: null,
+                  saleCount: { $sum: 1 },
+                  meterQuantity: {
+                    $sum: {
+                      $cond: [
+                        { $eq: ['$items.fabricSaleSnapshot.unit', QuantityUnit.METER] },
+                        { $ifNull: ['$items.fabricSaleSnapshot.quantitySold', 0] },
+                        0,
+                      ],
+                    },
+                  },
+                  pieceQuantity: {
+                    $sum: {
+                      $cond: [
+                        { $eq: ['$items.fabricSaleSnapshot.unit', QuantityUnit.PIECE] },
+                        { $ifNull: ['$items.fabricSaleSnapshot.quantitySold', 0] },
+                        0,
+                      ],
+                    },
+                  },
+                  salesAmount: {
+                    $sum: { $ifNull: ['$items.fabricSaleSnapshot.lineTotal', 0] },
+                  },
+                  distinctFabricIds: {
+                    $addToSet: { $ifNull: ['$items.fabricSaleSnapshot.fabricId', null] },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  saleCount: 1,
+                  meterQuantity: 1,
+                  pieceQuantity: 1,
+                  salesAmount: 1,
+                  distinctFabricCount: {
+                    $size: {
+                      $filter: {
+                        input: '$distinctFabricIds',
+                        as: 'fabricId',
+                        cond: { $ne: ['$$fabricId', null] },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+            fabricBreakdown: [
+              { $match: { 'items.fabricSaleSnapshot.fabricId': { $exists: true } } },
+              {
+                $group: {
+                  _id: '$items.fabricSaleSnapshot.fabricId',
+                  name: { $first: '$items.fabricSaleSnapshot.name' },
+                  type: { $first: '$items.fabricSaleSnapshot.type' },
+                  color: { $first: '$items.fabricSaleSnapshot.color' },
+                  unit: { $first: '$items.fabricSaleSnapshot.unit' },
+                  totalQuantitySold: {
+                    $sum: { $ifNull: ['$items.fabricSaleSnapshot.quantitySold', 0] },
+                  },
+                  totalSalesAmount: {
+                    $sum: { $ifNull: ['$items.fabricSaleSnapshot.lineTotal', 0] },
+                  },
+                  saleLineCount: { $sum: 1 },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  fabricId: '$_id',
+                  name: { $ifNull: ['$name', null] },
+                  type: { $ifNull: ['$type', null] },
+                  color: { $ifNull: ['$color', null] },
+                  unit: { $ifNull: ['$unit', null] },
+                  totalQuantitySold: 1,
+                  totalSalesAmount: 1,
+                  saleLineCount: 1,
+                },
+              },
+              { $sort: { totalSalesAmount: -1, fabricId: 1 } },
+              {
+                $facet: {
+                  data: [{ $skip: skip }, { $limit: limit }],
+                  meta: [{ $count: 'total' }],
+                },
+              },
+            ],
+          },
+        },
+      ] as PipelineStage[])
+      .exec();
+
+    const summary = aggregation?.summary[0];
+    const breakdown = aggregation?.fabricBreakdown[0];
+    const total = breakdown?.meta[0]?.total ?? 0;
+
+    return {
+      saleCount: summary?.saleCount ?? 0,
+      quantitySoldByUnit: {
+        [QuantityUnit.METER]: summary?.meterQuantity ?? 0,
+        [QuantityUnit.PIECE]: summary?.pieceQuantity ?? 0,
+      },
+      salesAmount: summary?.salesAmount ?? 0,
+      distinctFabricCount: summary?.distinctFabricCount ?? 0,
+      fabricBreakdown: {
+        data: breakdown?.data ?? [],
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        },
+      },
+    };
+  }
+
   async getServiceReport(query: ReportDateQueryDto): Promise<ServiceReport> {
     const [aggregation] = await this.tailoringServiceModel
       .aggregate<ServiceReportAggregation>([
@@ -247,6 +847,112 @@ export class ReportsService {
     };
   }
 
+  async getServiceUsageReport(
+    query: ServiceUsageReportQueryDto,
+  ): Promise<ServiceUsageReport> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const [aggregation] = await this.orderModel
+      .aggregate<ServiceUsageReportAggregation>([
+        ...this.buildDateMatchStages('createdAt', query),
+        {
+          $lookup: {
+            from: 'orderitems',
+            localField: 'orderId',
+            foreignField: 'orderId',
+            as: 'items',
+          },
+        },
+        { $unwind: '$items' },
+        {
+          $match: {
+            'items.itemType': { $ne: 'FABRIC_SALE' },
+            'items.serviceSnapshot.serviceId': { $exists: true },
+            ...(query.serviceId
+              ? { 'items.serviceSnapshot.serviceId': query.serviceId }
+              : {}),
+          },
+        },
+        {
+          $facet: {
+            summary: [
+              {
+                $group: {
+                  _id: null,
+                  serviceLineCount: { $sum: 1 },
+                  distinctServiceIds: { $addToSet: '$items.serviceSnapshot.serviceId' },
+                  serviceAmount: {
+                    $sum: { $ifNull: ['$items.serviceSnapshot.lineAmount', 0] },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  serviceLineCount: 1,
+                  distinctServiceCount: { $size: '$distinctServiceIds' },
+                  serviceAmount: 1,
+                },
+              },
+            ],
+            serviceBreakdown: [
+              {
+                $group: {
+                  _id: '$items.serviceSnapshot.serviceId',
+                  name: { $first: '$items.serviceSnapshot.name' },
+                  totalQuantity: {
+                    $sum: { $ifNull: ['$items.serviceSnapshot.quantity', 0] },
+                  },
+                  lineCount: { $sum: 1 },
+                  serviceAmount: {
+                    $sum: { $ifNull: ['$items.serviceSnapshot.lineAmount', 0] },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  serviceId: '$_id',
+                  name: { $ifNull: ['$name', null] },
+                  totalQuantity: 1,
+                  lineCount: 1,
+                  serviceAmount: 1,
+                },
+              },
+              { $sort: { serviceAmount: -1, serviceId: 1 } },
+              {
+                $facet: {
+                  data: [{ $skip: skip }, { $limit: limit }],
+                  meta: [{ $count: 'total' }],
+                },
+              },
+            ],
+          },
+        },
+      ] as PipelineStage[])
+      .exec();
+
+    const summary = aggregation?.summary[0];
+    const breakdown = aggregation?.serviceBreakdown[0];
+    const total = breakdown?.meta[0]?.total ?? 0;
+
+    return {
+      serviceLineCount: summary?.serviceLineCount ?? 0,
+      distinctServiceCount: summary?.distinctServiceCount ?? 0,
+      serviceAmount: summary?.serviceAmount ?? 0,
+      serviceBreakdown: {
+        data: breakdown?.data ?? [],
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        },
+      },
+    };
+  }
+
   private toActivityCounts(results: GroupedCount<boolean>[]) {
     const activity = { active: 0, inactive: 0 };
 
@@ -260,7 +966,7 @@ export class ReportsService {
   private buildDateMatchStages(
     field: 'createdAt' | 'appointmentDate',
     query: ReportDateQueryDto,
-  ): PipelineStage[] {
+  ): PipelineStage.Match[] {
     if (!query.fromDate && !query.toDate) {
       return [];
     }

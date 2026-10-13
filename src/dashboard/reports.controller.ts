@@ -4,7 +4,14 @@ import { Role } from '../common/constants/role.enum';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { ReportDateQueryDto } from './dto/report-date-query.dto';
+import {
+  CustomerReportQueryDto,
+  FabricSalesReportQueryDto,
+  OrderReportQueryDto,
+  PaymentReportQueryDto,
+  ReportDateQueryDto,
+  ServiceUsageReportQueryDto,
+} from './dto/report-date-query.dto';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
@@ -14,13 +21,18 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('customers')
-  getCustomerReport(@Query() query: ReportDateQueryDto) {
+  getCustomerReport(@Query() query: CustomerReportQueryDto) {
     return this.reportsService.getCustomerReport(query);
   }
 
   @Get('orders')
-  getOrderReport(@Query() query: ReportDateQueryDto) {
+  getOrderReport(@Query() query: OrderReportQueryDto) {
     return this.reportsService.getOrderReport(query);
+  }
+
+  @Get('payments')
+  getPaymentReport(@Query() query: PaymentReportQueryDto) {
+    return this.reportsService.getPaymentReport(query);
   }
 
   @Get('appointments')
@@ -33,8 +45,18 @@ export class ReportsController {
     return this.reportsService.getFabricReport(query);
   }
 
+  @Get('fabric-sales')
+  getFabricSalesReport(@Query() query: FabricSalesReportQueryDto) {
+    return this.reportsService.getFabricSalesReport(query);
+  }
+
   @Get('services')
   getServiceReport(@Query() query: ReportDateQueryDto) {
     return this.reportsService.getServiceReport(query);
+  }
+
+  @Get('service-usage')
+  getServiceUsageReport(@Query() query: ServiceUsageReportQueryDto) {
+    return this.reportsService.getServiceUsageReport(query);
   }
 }

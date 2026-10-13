@@ -1,12 +1,20 @@
 import {
   IsDateString,
+  IsEnum,
+  IsInt,
   IsOptional,
+  IsString,
   Matches,
+  Max,
+  Min,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+import { PaymentMethod } from '../../payments/enums/payment-method.enum';
 
 export function parseReportDate(value: string): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -71,4 +79,92 @@ export class ReportDateQueryDto {
   )
   @Validate(ReportDateRangeConstraint)
   toDate?: string;
+}
+
+export class OrderReportQueryDto extends ReportDateQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^CUS-\d{6}$/, {
+    message: 'customerId must be a valid customer ID',
+  })
+  customerId?: string;
+}
+
+export class PaymentReportQueryDto extends ReportDateQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^CUS-\d{6}$/, {
+    message: 'customerId must be a valid customer ID',
+  })
+  customerId?: string;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+}
+
+export class CustomerReportQueryDto extends ReportDateQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^CUS-\d{6}$/, {
+    message: 'customerId must be a valid customer ID',
+  })
+  customerId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
+}
+
+export class FabricSalesReportQueryDto extends ReportDateQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^FAB-\d{6}$/, {
+    message: 'fabricId must be a valid fabric ID',
+  })
+  fabricId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
+}
+
+export class ServiceUsageReportQueryDto extends ReportDateQueryDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^SRV-\d{6}$/, {
+    message: 'serviceId must be a valid service ID',
+  })
+  serviceId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
 }
