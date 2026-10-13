@@ -1,9 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 
 import { Role } from '../common/constants/role.enum';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ReportDateQueryDto } from './dto/report-date-query.dto';
 import { DashboardService } from './dashboard.service';
 
 @Controller('dashboard')
@@ -13,7 +14,7 @@ export class DashboardController {
 
   @Get('summary')
   @Roles(Role.SUPER_ADMIN, Role.MANAGER)
-  getSummary() {
-    return this.dashboardService.getSummary();
+  getSummary(@Query() query: ReportDateQueryDto) {
+    return this.dashboardService.getSummary(query);
   }
 }

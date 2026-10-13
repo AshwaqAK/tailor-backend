@@ -1,4 +1,5 @@
 import { AppointmentStatus } from '../../appointments/enums/appointment-status.enum';
+import { QuantityUnit } from '../../fabrics/enums/quantity-unit.enum';
 import { OrderStatus } from '../../orders/enums/order-status.enum';
 
 export interface ActivityBreakdown {
@@ -26,4 +27,40 @@ export interface DashboardSummary {
     count: number;
     threshold: number;
   };
+  ordersToday: number;
+  orderValue: number;
+  outstanding: {
+    total: number;
+    orderCount: number;
+  };
+  recentOrders: RecentOrder[];
+  revenue: {
+    collected: number;
+  };
+  fabricStock: {
+    activeFabricCount: number;
+    inactiveFabricCount: number;
+    availableQuantityByUnit: Record<QuantityUnit, number>;
+    lowStock: {
+      count: number;
+      threshold: number;
+    };
+  };
+  salesMix: {
+    tailoringAmount: number;
+    attachedFabricAmount: number;
+    fabricSaleAmount: number;
+    totalOrderValue: number;
+  };
+}
+
+export interface RecentOrder {
+  orderId: string;
+  customerId: string;
+  customerName?: string;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: OrderStatus;
+  createdAt: Date;
 }
