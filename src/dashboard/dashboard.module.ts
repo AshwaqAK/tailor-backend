@@ -6,6 +6,7 @@ import { AuthTokenModule } from '../auth/auth-token.module';
 import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { Fabric, FabricSchema } from '../fabrics/schemas/fabric.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import {
   TailoringService,
   TailoringServiceSchema,
@@ -20,6 +21,7 @@ import { ReportsService } from './reports.service';
     MongooseModule.forFeature([
       { name: Customer.name, schema: CustomerSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: Payment.name, schema: PaymentSchema },
       { name: Appointment.name, schema: AppointmentSchema },
       { name: Fabric.name, schema: FabricSchema },
       { name: TailoringService.name, schema: TailoringServiceSchema },
