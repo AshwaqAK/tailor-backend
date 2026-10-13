@@ -549,7 +549,7 @@ describe('OrdersService', () => {
       type: FabricType.COTTON,
       color: 'White',
       unit: QuantityUnit.METER,
-      pricePerUnit: 125.5,
+      pricePerUnit: 400,
     });
     const { order } = createOrderDocument();
     let capturedItemInput: Record<string, unknown> | undefined;
@@ -568,7 +568,7 @@ describe('OrdersService', () => {
           {
             itemType: OrderItemType.FABRIC_SALE,
             fabricId: 'FAB-000001',
-            quantity: 1.25,
+            quantity: 2.5,
             unitPrice: 999,
           },
         ],
@@ -581,7 +581,7 @@ describe('OrdersService', () => {
     expect(garmentTypePricingService.calculateTailoringPricing).not.toHaveBeenCalled();
     expect(fabricsService.deductStock).toHaveBeenCalledWith(
       'FAB-000001',
-      1.25,
+      2.5,
       'ORD-000009',
       'USR-000009',
       session,
@@ -589,24 +589,24 @@ describe('OrdersService', () => {
     expect(capturedItemInput).toEqual(
       expect.objectContaining({
         itemType: OrderItemType.FABRIC_SALE,
-        quantity: 1.25,
-        unitPrice: 125.5,
+        quantity: 2.5,
+        unitPrice: 400,
         fabricSaleSnapshot: {
           fabricId: 'FAB-000001',
           name: 'Cotton',
           type: FabricType.COTTON,
           color: 'White',
           unit: QuantityUnit.METER,
-          pricePerUnit: 125.5,
-          quantitySold: 1.25,
-          lineTotal: 156.88,
+          pricePerUnit: 400,
+          quantitySold: 2.5,
+          lineTotal: 1000,
         },
       }),
     );
     expect(capturedItemInput).not.toHaveProperty('tailoringPricingSnapshot');
-    expect(result.order.totalAmount).toBe(156.88);
+    expect(result.order.totalAmount).toBe(1000);
     expect(result.order.paidAmount).toBe(0);
-    expect(result.order.balanceAmount).toBe(156.88);
+    expect(result.order.balanceAmount).toBe(1000);
   });
 
   it('accepts a whole-number quantity for a PIECE fabric sale', async () => {
