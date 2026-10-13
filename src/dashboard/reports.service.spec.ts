@@ -562,6 +562,64 @@ describe('ReportsService', () => {
     expect(facet.byMethod[0]).toEqual({ $match: expectedPaidAt });
   });
 
+  it('uses one exclusive next-day boundary for a single payment calendar day', async () => {
+    paymentModel.aggregate.mockReturnValue(
+      aggregation([{ grossCollections: [], refunds: [], byStatus: [], byMethod: [] }]),
+    );
+    const query = Object.assign(new PaymentReportQueryDto(), {
+      fromDate: '2026-02-14',
+      toDate: '2026-02-14',
+    });
+
+    await service.getPaymentReport(query);
+
+    const pipeline = paymentModel.aggregate.mock.calls[0][0] as Array<Record<string, unknown>>;
+    const facet = pipeline[0].$facet as Record<string, Array<Record<string, unknown>>>;
+    const expectedRange = {
+      $gte: new Date('2026-02-14T00:00:00.000Z'),
+      $lt: new Date('2026-02-15T00:00:00.000Z'),
+    };
+
+    expect(facet.grossCollections[0]).toEqual({
+      $match: { paidAt: expectedRange, status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] } },
+    });
+    expect(facet.refunds[0]).toEqual({
+      $match: { refundedAt: expectedRange, status: PaymentStatus.REFUNDED },
+    });
+  });
+
+  it('uses one exclusive next-day boundary for multi-day collection and refund ranges', async () => {
+    paymentModel.aggregate.mockReturnValue(
+      aggregation([{ grossCollections: [], refunds: [], byStatus: [], byMethod: [] }]),
+    );
+    const query = Object.assign(new PaymentReportQueryDto(), {
+      fromDate: '2026-02-01',
+      toDate: '2026-02-28',
+    });
+
+    await service.getPaymentReport(query);
+
+    const pipeline = paymentModel.aggregate.mock.calls[0][0] as Array<Record<string, unknown>>;
+    const facet = pipeline[0].$facet as Record<string, Array<Record<string, unknown>>>;
+    expect(facet.byStatus[0]).toEqual({
+      $match: {
+        paidAt: {
+          $gte: new Date('2026-02-01T00:00:00.000Z'),
+          $lt: new Date('2026-03-01T00:00:00.000Z'),
+        },
+      },
+    });
+    expect(facet.refunds[0]).toEqual({
+      $match: {
+        refundedAt: {
+          $gte: new Date('2026-02-01T00:00:00.000Z'),
+          $lt: new Date('2026-03-01T00:00:00.000Z'),
+        },
+        status: PaymentStatus.REFUNDED,
+      },
+    });
+  });
+
   it('returns zeroed payment metrics for an empty result and preserves other reports', async () => {
     paymentModel.aggregate.mockReturnValue(aggregation([]));
 
