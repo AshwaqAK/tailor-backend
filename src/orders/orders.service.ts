@@ -19,6 +19,7 @@ import { ClothingType } from '../measurements/enums/clothing-type.enum';
 import { ServicesService } from '../services/services.service';
 import type { TailoringServiceDocument } from '../services/schemas/tailoring-service.schema';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
+import { OrderItemType } from './dto/create-order-item.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderListQueryDto } from './dto/order-list-query.dto';
 import { PricingPreviewDto } from './dto/pricing-preview.dto';
@@ -143,6 +144,14 @@ export class OrdersService {
       const garmentTypesById = new Map<string, GarmentTypeDocument>();
 
       for (const item of createOrderDto.items) {
+        if (this.isFabricSaleItem(item)) {
+          continue;
+        }
+
+        if (!item.garmentTypeId) {
+          throw new BadRequestException('Garment type is required for tailoring items');
+        }
+
         if (garmentTypesById.has(item.garmentTypeId)) {
           continue;
         }
@@ -160,7 +169,7 @@ export class OrdersService {
       }
 
       const serviceIds = createOrderDto.items.flatMap((item) =>
-        item.serviceId ? [item.serviceId] : [],
+        !this.isFabricSaleItem(item) && item.serviceId ? [item.serviceId] : [],
       );
       const tailoringServices = await this.servicesService.findActiveByIds(serviceIds, session);
       const servicesById = new Map<string, TailoringServiceDocument>(
@@ -171,6 +180,15 @@ export class OrdersService {
       const fabricQuantities = new Map<string, number>();
 
       for (const item of createOrderDto.items) {
+        if (this.isFabricSaleItem(item)) {
+          if (!item.fabricId) {
+            throw new BadRequestException('fabricId is required for fabric sale items');
+          }
+
+          this.addFabricQuantity(fabricQuantities, item.fabricId, item.quantity);
+          continue;
+        }
+
         const hasFabricId = item.fabricId !== undefined;
         const hasFabricQuantity = item.fabricQuantity !== undefined;
 
@@ -206,6 +224,49 @@ export class OrdersService {
       const orderItems: OrderItemDocument[] = [];
 
       for (const itemDto of createOrderDto.items) {
+        if (this.isFabricSaleItem(itemDto)) {
+          if (!itemDto.fabricId) {
+            throw new BadRequestException('fabricId is required for fabric sale items');
+          }
+
+          const fabric = fabricsById.get(itemDto.fabricId);
+
+          if (!fabric) {
+            throw new InternalServerErrorException('Unable to calculate fabric sale cost');
+          }
+
+          const lineTotal = this.calculateFabricLineAmount(
+            fabric.pricePerUnit,
+            itemDto.quantity,
+          );
+          const fabricSaleItem = new this.orderItemModel({
+            orderId,
+            itemType: OrderItemType.FABRIC_SALE,
+            quantity: itemDto.quantity,
+            unitPrice: fabric.pricePerUnit,
+            fabricSaleSnapshot: {
+              fabricId: fabric.fabricId,
+              name: fabric.name,
+              type: fabric.type,
+              color: fabric.color,
+              unit: fabric.unit,
+              pricePerUnit: fabric.pricePerUnit,
+              quantitySold: itemDto.quantity,
+              lineTotal,
+            },
+            notes: itemDto.notes,
+          });
+
+          orderItems.push(fabricSaleItem);
+          continue;
+        }
+
+        if (!itemDto.garmentTypeId || !itemDto.measurementId) {
+          throw new BadRequestException(
+            'Garment type and measurement are required for tailoring items',
+          );
+        }
+
         const measurement = await this.measurementModel
           .findById(itemDto.measurementId)
           .session(session)
@@ -242,7 +303,8 @@ export class OrdersService {
         const fabric = itemDto.fabricId ? fabricsById.get(itemDto.fabricId) : undefined;
         const measurementValues = new Map<string, number>(measurement.measurements);
         const orderItem = new this.orderItemModel({
-            orderId,
+          orderId,
+          itemType: OrderItemType.TAILORING,
           garmentTypeId: itemDto.garmentTypeId,
           ...(clothingType ? { clothingType } : {}),
           quantity: itemDto.quantity,
@@ -292,11 +354,7 @@ export class OrdersService {
         orderItems.push(orderItem);
       }
 
-      const totalAmount = this.calculateOrderTotal(
-        orderItems,
-        fabricQuantities,
-        fabricsById,
-      );
+      const totalAmount = this.calculateOrderTotal(orderItems);
 
       const order = new this.orderModel({
         orderId,
@@ -497,6 +555,41 @@ export class OrdersService {
     return Number(lineAmount.toFixed(2));
   }
 
+  private calculateFabricLineAmount(pricePerUnit: number, quantity: number): number {
+    if (!Number.isFinite(pricePerUnit) || pricePerUnit < 0) {
+      throw new BadRequestException('Fabric price per unit must be a non-negative number');
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new BadRequestException('Fabric sale quantity must be positive');
+    }
+
+    const lineTotal = pricePerUnit * quantity;
+
+    if (!Number.isFinite(lineTotal) || lineTotal < 0) {
+      throw new BadRequestException('Fabric sale line total must be non-negative');
+    }
+
+    return Number(lineTotal.toFixed(2));
+  }
+
+  private addFabricQuantity(
+    fabricQuantities: Map<string, number>,
+    fabricId: string,
+    quantity: number,
+  ): void {
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new BadRequestException('Fabric quantity must be positive');
+    }
+
+    const currentQuantity = fabricQuantities.get(fabricId) ?? 0;
+    fabricQuantities.set(fabricId, currentQuantity + quantity);
+  }
+
+  private isFabricSaleItem(item: { itemType?: string }): boolean {
+    return item.itemType === OrderItemType.FABRIC_SALE;
+  }
+
   private legacyClothingType(code: string): ClothingType | undefined {
     return Object.values(ClothingType).includes(code as ClothingType)
       ? (code as ClothingType)
@@ -504,21 +597,24 @@ export class OrdersService {
   }
 
   private calculateOrderTotal(
-    items: Pick<OrderItemDocument, 'unitPrice' | 'quantity'>[],
-    fabricQuantities: ReadonlyMap<string, number>,
-    fabricsById: ReadonlyMap<string, FabricDocument>,
+    items: Pick<
+      OrderItemDocument,
+      'itemType' | 'unitPrice' | 'quantity' | 'fabricSnapshot' | 'fabricSaleSnapshot'
+    >[],
   ): number {
-    const garmentTotal = items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
-    const fabricTotal = Array.from(fabricQuantities).reduce((total, [fabricId, quantity]) => {
-      const fabric = fabricsById.get(fabricId);
+    const totalAmount = items.reduce((total, item) => {
+      const lineTotal = item.unitPrice * item.quantity;
 
-      if (!fabric) {
-        throw new InternalServerErrorException('Unable to calculate fabric cost');
+      if (this.isFabricSaleItem(item)) {
+        return total + (item.fabricSaleSnapshot?.lineTotal ?? lineTotal);
       }
 
-      return total + fabric.pricePerUnit * quantity;
+      const attachedFabricTotal = item.fabricSnapshot
+        ? item.fabricSnapshot.pricePerUnit * item.fabricSnapshot.quantityUsed
+        : 0;
+
+      return total + lineTotal + attachedFabricTotal;
     }, 0);
-    const totalAmount = garmentTotal + fabricTotal;
 
     if (!Number.isFinite(totalAmount) || totalAmount < 0) {
       throw new BadRequestException('Order total amount must be a non-negative number');
