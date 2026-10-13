@@ -1,6 +1,5 @@
 import {
   IsEnum,
-  IsInt,
   IsObject,
   IsMongoId,
   IsNumber,
@@ -8,11 +7,11 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Min,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
-  Min,
   ValidateIf,
 } from 'class-validator';
 
@@ -31,6 +30,26 @@ class TailoringOnlyFieldConstraint implements ValidatorConstraintInterface {
 
   defaultMessage(args: ValidationArguments): string {
     return `${args.property} is not allowed for FABRIC_SALE items`;
+  }
+}
+
+@ValidatorConstraint({ name: 'orderItemQuantity', async: false })
+class OrderItemQuantityConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+      return false;
+    }
+
+    const item = args.object as CreateOrderItemDto;
+    return item.itemType === OrderItemType.FABRIC_SALE || Number.isInteger(value);
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    const item = args.object as CreateOrderItemDto;
+
+    return item.itemType === OrderItemType.FABRIC_SALE
+      ? `${args.property} must be a positive number`
+      : `${args.property} must be a positive integer`;
   }
 }
 
@@ -61,8 +80,9 @@ export class CreateOrderItemDto {
   @IsEnum(ClothingType)
   clothingType?: ClothingType;
 
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 3 })
   @Min(1)
+  @Validate(OrderItemQuantityConstraint)
   quantity!: number;
 
   @ValidateIf(

@@ -568,7 +568,7 @@ describe('OrdersService', () => {
           {
             itemType: OrderItemType.FABRIC_SALE,
             fabricId: 'FAB-000001',
-            quantity: 2,
+            quantity: 1.25,
             unitPrice: 999,
           },
         ],
@@ -581,7 +581,7 @@ describe('OrdersService', () => {
     expect(garmentTypePricingService.calculateTailoringPricing).not.toHaveBeenCalled();
     expect(fabricsService.deductStock).toHaveBeenCalledWith(
       'FAB-000001',
-      2,
+      1.25,
       'ORD-000009',
       'USR-000009',
       session,
@@ -589,7 +589,7 @@ describe('OrdersService', () => {
     expect(capturedItemInput).toEqual(
       expect.objectContaining({
         itemType: OrderItemType.FABRIC_SALE,
-        quantity: 2,
+        quantity: 1.25,
         unitPrice: 125.5,
         fabricSaleSnapshot: {
           fabricId: 'FAB-000001',
@@ -598,15 +598,98 @@ describe('OrdersService', () => {
           color: 'White',
           unit: QuantityUnit.METER,
           pricePerUnit: 125.5,
-          quantitySold: 2,
-          lineTotal: 251,
+          quantitySold: 1.25,
+          lineTotal: 156.88,
         },
       }),
     );
     expect(capturedItemInput).not.toHaveProperty('tailoringPricingSnapshot');
-    expect(result.order.totalAmount).toBe(251);
+    expect(result.order.totalAmount).toBe(156.88);
     expect(result.order.paidAmount).toBe(0);
-    expect(result.order.balanceAmount).toBe(251);
+    expect(result.order.balanceAmount).toBe(156.88);
+  });
+
+  it('accepts a whole-number quantity for a PIECE fabric sale', async () => {
+    mockCustomerExists();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 13 }),
+    });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      name: 'Buttons',
+      type: FabricType.COTTON,
+      color: 'White',
+      unit: QuantityUnit.PIECE,
+      pricePerUnit: 20,
+    });
+    const { order } = createOrderDocument();
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => {
+      const { item } = createOrderItemDocument();
+      return Object.assign(item, data);
+    });
+
+  const result = await service.createOrder(
+    {
+      customerId: 'CUS-000001',
+      orderDate,
+      items: [
+        {
+          itemType: OrderItemType.FABRIC_SALE,
+          fabricId: 'FAB-000001',
+          quantity: 3,
+        },
+      ],
+    } as never,
+    'USR-000009',
+  );
+  expect(result.order).toBe(order);
+  expect(result.items).toHaveLength(1);
+    expect(fabricsService.deductStock).toHaveBeenCalledWith(
+      'FAB-000001',
+      3,
+      'ORD-000013',
+      'USR-000009',
+      session,
+    );
+    expect(order.totalAmount).toBe(60);
+  });
+
+  it('rejects a fractional quantity for a PIECE fabric sale and aborts the transaction', async () => {
+    mockCustomerExists();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 14 }),
+    });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      name: 'Buttons',
+      type: FabricType.COTTON,
+      color: 'White',
+      unit: QuantityUnit.PIECE,
+      pricePerUnit: 20,
+    });
+
+    await expect(
+      service.createOrder(
+        {
+          customerId: 'CUS-000001',
+          orderDate,
+          items: [
+            {
+              itemType: OrderItemType.FABRIC_SALE,
+              fabricId: 'FAB-000001',
+              quantity: 1.5,
+            },
+          ],
+        } as never,
+        'USR-000009',
+      ),
+    ).rejects.toThrow('Fabric sale quantity must be a whole number for PIECE fabrics');
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(orderModel).not.toHaveBeenCalled();
+    expect(orderItemModel).not.toHaveBeenCalled();
   });
 
   it('supports mixed legacy tailoring and fabric-sale lines with one aggregated stock deduction', async () => {

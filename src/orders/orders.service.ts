@@ -11,6 +11,7 @@ import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { FabricsService } from '../fabrics/fabrics.service';
+import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { GarmentType, GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
 import { GarmentTypePricingService } from '../garment-types/garment-type-pricing.service';
@@ -127,7 +128,9 @@ export class OrdersService {
       }
 
       for (const item of createOrderDto.items) {
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        if (this.isFabricSaleItem(item)) {
+          this.validateFabricSaleQuantity(item.quantity);
+        } else if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
           throw new BadRequestException('Order service quantity must be a positive integer');
         }
       }
@@ -218,6 +221,13 @@ export class OrdersService {
           userId,
           session,
         );
+
+        for (const item of createOrderDto.items) {
+          if (this.isFabricSaleItem(item) && item.fabricId === fabricId) {
+            this.validateFabricSaleQuantityForUnit(item.quantity, fabric.unit);
+          }
+        }
+
         fabricsById.set(fabricId, fabric);
       }
 
@@ -571,6 +581,26 @@ export class OrdersService {
     }
 
     return Number(lineTotal.toFixed(2));
+  }
+
+  private validateFabricSaleQuantity(quantity: number): void {
+    if (
+      !Number.isFinite(quantity) ||
+      quantity <= 0 ||
+      Number(quantity.toFixed(3)) !== quantity
+    ) {
+      throw new BadRequestException(
+        'Fabric sale quantity must be positive with at most 3 decimal places',
+      );
+    }
+  }
+
+  private validateFabricSaleQuantityForUnit(quantity: number, unit: QuantityUnit): void {
+    this.validateFabricSaleQuantity(quantity);
+
+    if (unit === QuantityUnit.PIECE && !Number.isInteger(quantity)) {
+      throw new BadRequestException('Fabric sale quantity must be a whole number for PIECE fabrics');
+    }
   }
 
   private addFabricQuantity(

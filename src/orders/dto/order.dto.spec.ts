@@ -54,9 +54,19 @@ describe('Order DTO validation', () => {
       validateItem({
         itemType: OrderItemType.FABRIC_SALE,
         fabricId: 'FAB-000001',
-        quantity: 2,
+        quantity: 1.25,
       }),
     ).resolves.toHaveLength(0);
+  });
+
+  it('rejects excessive fabric-sale quantity precision', async () => {
+    await expect(
+      errorProperties({
+        itemType: OrderItemType.FABRIC_SALE,
+        fabricId: 'FAB-000001',
+        quantity: 1.2345,
+      }),
+    ).resolves.toContain('quantity');
   });
 
   it('requires fabricId for FABRIC_SALE items', async () => {
@@ -65,7 +75,7 @@ describe('Order DTO validation', () => {
     ).resolves.toContain('fabricId');
   });
 
-  it('requires a positive integer quantity for both item types', async () => {
+  it('requires a positive quantity for FABRIC_SALE items', async () => {
     await expect(
       errorProperties({ itemType: OrderItemType.FABRIC_SALE, fabricId: 'FAB-000001' }),
     ).resolves.toContain('quantity');
@@ -82,6 +92,12 @@ describe('Order DTO validation', () => {
     await expect(errorProperties({ itemType: OrderItemType.TAILORING, quantity: 1 })).resolves.toEqual(
       expect.arrayContaining(['garmentTypeId', 'unitPrice', 'measurementId']),
     );
+  });
+
+  it('rejects fractional tailoring quantities', async () => {
+    await expect(
+      errorProperties({ ...validTailoringItem(), quantity: 1.25 }),
+    ).resolves.toContain('quantity');
   });
 
   it('rejects tailoring-specific fields on FABRIC_SALE items', async () => {
