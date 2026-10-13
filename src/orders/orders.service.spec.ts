@@ -16,6 +16,8 @@ import { ClothingType } from '../measurements/enums/clothing-type.enum';
 import { FitPreference } from '../measurements/enums/fit-preference.enum';
 import type { ServicesService } from '../services/services.service';
 import type { CounterDocument } from '../users/schemas/counter.schema';
+import { OrderItemType } from './dto/create-order-item.dto';
+import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import type { OrderDocument } from './schemas/order.schema';
@@ -106,7 +108,7 @@ describe('OrdersService', () => {
     measuredAt: new Date('2025-12-20T00:00:00.000Z'),
   } as unknown as MeasurementDocument;
 
-  const validDto = () => ({
+  const validDto = (): CreateOrderDto => ({
     customerId: 'CUS-000001',
     orderDate,
     items: [
@@ -366,6 +368,7 @@ describe('OrdersService', () => {
     expect(orderItemModel).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: 'ORD-000007',
+        itemType: OrderItemType.TAILORING,
         garmentTypeId: 'GRT-000001',
         clothingType: ClothingType.SHIRT,
         unitPrice: 500,
@@ -531,6 +534,236 @@ describe('OrdersService', () => {
       },
     });
     expect(order.totalAmount).toBe(1500);
+    expect(fabricsService.deductStock).not.toHaveBeenCalled();
+  });
+
+  it('creates a fabric-only sale from database fabric pricing without tailoring data', async () => {
+    mockCustomerExists();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 9 }),
+    });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      name: 'Cotton',
+      type: FabricType.COTTON,
+      color: 'White',
+      unit: QuantityUnit.METER,
+      pricePerUnit: 125.5,
+    });
+    const { order } = createOrderDocument();
+    let capturedItemInput: Record<string, unknown> | undefined;
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => {
+      capturedItemInput = data;
+      const { item } = createOrderItemDocument();
+      return Object.assign(item, data);
+    });
+
+    const result = await service.createOrder(
+      {
+        customerId: 'CUS-000001',
+        orderDate,
+        items: [
+          {
+            itemType: OrderItemType.FABRIC_SALE,
+            fabricId: 'FAB-000001',
+            quantity: 2,
+            unitPrice: 999,
+          },
+        ],
+      } as never,
+      'USR-000009',
+    );
+
+    expect(garmentTypeModel.findOne).not.toHaveBeenCalled();
+    expect(measurementModel.findById).not.toHaveBeenCalled();
+    expect(garmentTypePricingService.calculateTailoringPricing).not.toHaveBeenCalled();
+    expect(fabricsService.deductStock).toHaveBeenCalledWith(
+      'FAB-000001',
+      2,
+      'ORD-000009',
+      'USR-000009',
+      session,
+    );
+    expect(capturedItemInput).toEqual(
+      expect.objectContaining({
+        itemType: OrderItemType.FABRIC_SALE,
+        quantity: 2,
+        unitPrice: 125.5,
+        fabricSaleSnapshot: {
+          fabricId: 'FAB-000001',
+          name: 'Cotton',
+          type: FabricType.COTTON,
+          color: 'White',
+          unit: QuantityUnit.METER,
+          pricePerUnit: 125.5,
+          quantitySold: 2,
+          lineTotal: 251,
+        },
+      }),
+    );
+    expect(capturedItemInput).not.toHaveProperty('tailoringPricingSnapshot');
+    expect(result.order.totalAmount).toBe(251);
+    expect(result.order.paidAmount).toBe(0);
+    expect(result.order.balanceAmount).toBe(251);
+  });
+
+  it('supports mixed legacy tailoring and fabric-sale lines with one aggregated stock deduction', async () => {
+    mockCustomerExists();
+    mockMeasurement();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 10 }),
+    });
+    fabricsService.deductStock.mockResolvedValue({
+      fabricId: 'FAB-000001',
+      name: 'Cotton',
+      type: FabricType.COTTON,
+      color: 'White',
+      unit: QuantityUnit.METER,
+      pricePerUnit: 125.5,
+    });
+    const { order } = createOrderDocument();
+    const capturedItems: Record<string, unknown>[] = [];
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => {
+      capturedItems.push(data);
+      const { item } = createOrderItemDocument();
+      return Object.assign(item, data);
+    });
+
+    const tailoringItem = validDto().items[0];
+    delete (tailoringItem as { serviceId?: string }).serviceId;
+    const result = await service.createOrder(
+      {
+        customerId: 'CUS-000001',
+        orderDate,
+        items: [
+          tailoringItem,
+          {
+            itemType: OrderItemType.FABRIC_SALE,
+            fabricId: 'FAB-000001',
+            quantity: 2,
+          },
+        ],
+      } as never,
+      'USR-000009',
+    );
+
+    expect(fabricsService.deductStock).toHaveBeenCalledTimes(1);
+    expect(fabricsService.deductStock).toHaveBeenCalledWith(
+      'FAB-000001',
+      3.25,
+      'ORD-000010',
+      'USR-000009',
+      session,
+    );
+    expect(garmentTypePricingService.calculateTailoringPricing).toHaveBeenCalledTimes(1);
+    expect(measurementModel.findById).toHaveBeenCalledTimes(1);
+    expect(capturedItems).toHaveLength(2);
+    expect(capturedItems[0]).toEqual(expect.objectContaining({ itemType: OrderItemType.TAILORING }));
+    expect(capturedItems[1]).toEqual(expect.objectContaining({ itemType: OrderItemType.FABRIC_SALE }));
+    expect(result.order.totalAmount).toBe(1907.88);
+    expect(result.order.balanceAmount).toBe(1907.88);
+  });
+
+  it('rolls back a fabric-only order when aggregated stock is insufficient', async () => {
+    mockCustomerExists();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 11 }),
+    });
+    fabricsService.deductStock.mockRejectedValue(
+      new BadRequestException('Insufficient stock for fabric FAB-000001'),
+    );
+
+    await expect(
+      service.createOrder(
+        {
+          customerId: 'CUS-000001',
+          orderDate,
+          items: [
+            {
+              itemType: OrderItemType.FABRIC_SALE,
+              fabricId: 'FAB-000001',
+              quantity: 2,
+            },
+          ],
+        } as never,
+        'USR-000009',
+      ),
+    ).rejects.toThrow(new BadRequestException('Insufficient stock for fabric FAB-000001'));
+
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalled();
+  });
+
+  it('aborts the transaction when a later fabric deduction fails', async () => {
+    mockCustomerExists();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 12 }),
+    });
+    fabricsService.deductStock.mockImplementation((fabricId: string) => {
+      if (fabricId === 'FAB-000002') {
+        return Promise.reject(
+          new BadRequestException('Insufficient stock for fabric FAB-000002'),
+        );
+      }
+
+      return Promise.resolve({
+        fabricId: 'FAB-000001',
+        name: 'Cotton',
+        type: FabricType.COTTON,
+        color: 'White',
+        unit: QuantityUnit.METER,
+        pricePerUnit: 125.5,
+      });
+    });
+
+    await expect(
+      service.createOrder(
+        {
+          customerId: 'CUS-000001',
+          orderDate,
+          items: [
+            {
+              itemType: OrderItemType.FABRIC_SALE,
+              fabricId: 'FAB-000001',
+              quantity: 1,
+            },
+            {
+              itemType: OrderItemType.FABRIC_SALE,
+              fabricId: 'FAB-000002',
+              quantity: 1,
+            },
+          ],
+        } as never,
+        'USR-000009',
+      ),
+    ).rejects.toThrow(new BadRequestException('Insufficient stock for fabric FAB-000002'));
+
+    expect(fabricsService.deductStock).toHaveBeenNthCalledWith(
+      1,
+      'FAB-000001',
+      1,
+      'ORD-000012',
+      'USR-000009',
+      session,
+    );
+    expect(fabricsService.deductStock).toHaveBeenNthCalledWith(
+      2,
+      'FAB-000002',
+      1,
+      'ORD-000012',
+      'USR-000009',
+      session,
+    );
+    expect(orderModel).not.toHaveBeenCalled();
+    expect(orderItemModel).not.toHaveBeenCalled();
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalled();
   });
 
   it('rejects invalid customization selections from the pricing engine', async () => {
@@ -734,6 +967,31 @@ describe('OrdersService', () => {
       new NotFoundException('Order not found'),
     );
   });
+
+  it.each([
+    [0, 1907.88, OrderPaymentStatus.UNPAID],
+    [900, 1007.88, OrderPaymentStatus.PARTIALLY_PAID],
+    [1907.88, 0, OrderPaymentStatus.PAID],
+  ])(
+    'reports %s payment status for a mixed order without recalculating its stored total',
+    async (paidAmount, balanceAmount, paymentStatus) => {
+      const { order } = createOrderDocument({
+        totalAmount: 1907.88,
+        paidAmount,
+        balanceAmount,
+      });
+      orderModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(order) });
+      orderItemModel.find.mockReturnValue({
+        sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
+      });
+
+      await expect(service.getOrderByOrderId(order.orderId)).resolves.toEqual({
+        order,
+        items: [],
+        paymentStatus,
+      });
+    },
+  );
 
   it('retrieves and groups orders by customer without loading per-order items separately', async () => {
     const first = createOrderDocument({

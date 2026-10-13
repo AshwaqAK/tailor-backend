@@ -12,6 +12,11 @@ import { TailoringService } from '../../services/schemas/tailoring-service.schem
 import { GarmentType } from '../../garment-types/schemas/garment-type.schema';
 import { PricingType } from '../../garment-types/enums/pricing-type.enum';
 
+export enum OrderItemType {
+  TAILORING = 'TAILORING',
+  FABRIC_SALE = 'FABRIC_SALE',
+}
+
 @Schema({
   _id: false,
   versionKey: false,
@@ -218,6 +223,70 @@ export const FabricSnapshotSchema = SchemaFactory.createForClass(FabricSnapshot)
   _id: false,
   versionKey: false,
 })
+export class FabricSaleSnapshot {
+  @Prop({
+    type: String,
+    ref: Fabric.name,
+    required: true,
+    trim: true,
+    match: /^FAB-\d{6}$/,
+  })
+  fabricId!: string;
+
+  @Prop({
+    required: true,
+    trim: true,
+  })
+  name!: string;
+
+  @Prop({
+    type: String,
+    enum: FabricType,
+    required: true,
+  })
+  type!: FabricType;
+
+  @Prop({
+    required: true,
+    trim: true,
+  })
+  color!: string;
+
+  @Prop({
+    type: String,
+    enum: QuantityUnit,
+    required: true,
+  })
+  unit!: QuantityUnit;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 0,
+  })
+  pricePerUnit!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: Number.MIN_VALUE,
+  })
+  quantitySold!: number;
+
+  @Prop({
+    type: Number,
+    required: true,
+    min: 0,
+  })
+  lineTotal!: number;
+}
+
+export const FabricSaleSnapshotSchema = SchemaFactory.createForClass(FabricSaleSnapshot);
+
+@Schema({
+  _id: false,
+  versionKey: false,
+})
 export class ServiceSnapshot {
   @Prop({
     type: String,
@@ -270,6 +339,14 @@ export type OrderItemDocument = HydratedDocument<OrderItem> & {
 export class OrderItem {
   @Prop({
     type: String,
+    enum: OrderItemType,
+    required: true,
+    default: OrderItemType.TAILORING,
+  })
+  itemType!: OrderItemType;
+
+  @Prop({
+    type: String,
     ref: 'Order',
     required: true,
     index: true,
@@ -286,7 +363,9 @@ export class OrderItem {
   @Prop({
     type: String,
     ref: GarmentType.name,
-    required: true,
+    required: function (this: OrderItem): boolean {
+      return this.itemType !== OrderItemType.FABRIC_SALE;
+    },
     trim: true,
     match: /^GRT-\d{6}$/,
   })
@@ -311,7 +390,9 @@ export class OrderItem {
 
   @Prop({
     type: TailoringPricingSnapshotSchema,
-    required: true,
+    required: function (this: OrderItem): boolean {
+      return this.itemType !== OrderItemType.FABRIC_SALE;
+    },
   })
   tailoringPricingSnapshot!: TailoringPricingSnapshot;
 
@@ -330,6 +411,14 @@ export class OrderItem {
     type: FabricSnapshotSchema,
   })
   fabricSnapshot?: FabricSnapshot;
+
+  @Prop({
+    type: FabricSaleSnapshotSchema,
+    required: function (this: OrderItem): boolean {
+      return this.itemType === OrderItemType.FABRIC_SALE;
+    },
+  })
+  fabricSaleSnapshot?: FabricSaleSnapshot;
 
   @Prop({
     type: ServiceSnapshotSchema,

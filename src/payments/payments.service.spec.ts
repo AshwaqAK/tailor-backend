@@ -66,6 +66,15 @@ describe('PaymentsService', () => {
       ...overrides,
     }) as OrderDocument;
 
+  const createMixedOrder = (overrides: Partial<OrderDocument> = {}) =>
+    createOrder({
+      orderId: 'ORD-000009',
+      totalAmount: 1907.88,
+      paidAmount: 0,
+      balanceAmount: 1907.88,
+      ...overrides,
+    });
+
   const createPaymentDocument = (overrides: Partial<PaymentDocument> = {}) => {
     const save = jest.fn();
     const payment = {
@@ -231,6 +240,62 @@ describe('PaymentsService', () => {
     );
   });
 
+  it('supports a full payment for a fabric-only order total', async () => {
+    const fabricOnlyOrder = createOrder({
+      orderId: 'ORD-000008',
+      totalAmount: 251,
+      paidAmount: 0,
+      balanceAmount: 251,
+    });
+    mockSuccessfulDependencies(
+      fabricOnlyOrder,
+      createOrder({
+        orderId: 'ORD-000008',
+        totalAmount: 251,
+        paidAmount: 251,
+        balanceAmount: 0,
+      }),
+    );
+
+    await service.create(
+      { ...validDto(), orderId: 'ORD-000008', amount: 251 },
+      'USR-000001',
+    );
+
+    expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'ORD-000008',
+        paidAmount: 0,
+        balanceAmount: 251,
+      }),
+      { $set: { paidAmount: 251, balanceAmount: 0, updatedBy: 'USR-000001' } },
+      { new: true, session },
+    );
+  });
+
+  it('supports a partial payment against a mixed order total', async () => {
+    const mixedOrder = createMixedOrder();
+    mockSuccessfulDependencies(
+      mixedOrder,
+      createMixedOrder({ paidAmount: 900, balanceAmount: 1007.88 }),
+    );
+
+    await service.create(
+      { ...validDto(), orderId: 'ORD-000009', amount: 900 },
+      'USR-000001',
+    );
+
+    expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'ORD-000009',
+        paidAmount: 0,
+        balanceAmount: 1907.88,
+      }),
+      { $set: { paidAmount: 900, balanceAmount: 1007.88, updatedBy: 'USR-000001' } },
+      { new: true, session },
+    );
+  });
+
   it.each([
     OrderStatus.CONFIRMED,
     OrderStatus.IN_PROGRESS,
@@ -265,6 +330,20 @@ describe('PaymentsService', () => {
     await expect(service.create({ ...validDto(), amount: 800.01 }, 'USR-000001')).rejects.toThrow(
       new BadRequestException('Payment amount exceeds the outstanding balance'),
     );
+    expect(paymentModel).not.toHaveBeenCalled();
+    expect(session.abortTransaction).toHaveBeenCalled();
+  });
+
+  it('rejects overpayment against a mixed order total', async () => {
+    orderModel.findOne.mockReturnValue(sessionQuery(createMixedOrder()));
+    customerModel.exists.mockReturnValue(sessionQuery({ _id: 'customer-id' }));
+
+    await expect(
+      service.create(
+        { ...validDto(), orderId: 'ORD-000009', amount: 1907.89 },
+        'USR-000001',
+      ),
+    ).rejects.toThrow(new BadRequestException('Payment amount exceeds the outstanding balance'));
     expect(paymentModel).not.toHaveBeenCalled();
     expect(session.abortTransaction).toHaveBeenCalled();
   });
