@@ -10,6 +10,7 @@ import { AppointmentQueryDto } from './dto/appointment-query.dto';
 import { AppointmentStatus } from './enums/appointment-status.enum';
 import { AppointmentType } from './enums/appointment-type.enum';
 import type { AppointmentDocument } from './schemas/appointment.schema';
+import type { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AppointmentsService } from './appointments.service';
 
 jest.mock('@nestjs/mongoose', () => ({
@@ -40,7 +41,7 @@ describe('AppointmentsService', () => {
   let counterModel: { findOneAndUpdate: jest.Mock };
   let service: AppointmentsService;
 
-  const validDto = () => ({
+  const validDto = (): CreateAppointmentDto => ({
     customerId: 'CUS-000001',
     orderId: 'ORD-000001',
     appointmentDate,

@@ -21,6 +21,7 @@ describe('MeasurementsController', () => {
     } as unknown as MeasurementsService);
     const dto = {
       customerId: 'CUS-000001',
+      garmentTypeId: 'GRT-000001',
       clothingType: ClothingType.SHIRT,
       version: 1,
       measurements: { chest: 40 },
