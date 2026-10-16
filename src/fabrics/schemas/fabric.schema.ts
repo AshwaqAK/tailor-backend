@@ -106,4 +106,5 @@ export class Fabric {
 export const FabricSchema = SchemaFactory.createForClass(Fabric);
 
 FabricSchema.index({ createdAt: 1, isActive: 1 });
+FabricSchema.index({ createdAt: -1, fabricId: -1 });
 FabricSchema.index({ isActive: 1, quantity: 1 });

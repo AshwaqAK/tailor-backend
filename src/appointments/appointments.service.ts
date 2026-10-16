@@ -17,14 +17,17 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { AppointmentStatus } from './enums/appointment-status.enum';
 import { Appointment, AppointmentDocument } from './schemas/appointment.schema';
+import { cursorPredicate, decodeCursor, encodeCursor, withCursorFilter } from '../common/pagination/cursor';
 
 export interface PaginatedAppointments {
   data: AppointmentDocument[];
   meta: {
-    page: number;
+    page?: number;
     limit: number;
-    total: number;
-    totalPages: number;
+    total?: number;
+    totalPages?: number;
+    hasNextPage?: boolean;
+    nextCursor?: string | null;
   };
 }
 
@@ -111,7 +114,8 @@ export class AppointmentsService {
 
   async findAll(query: AppointmentQueryDto): Promise<PaginatedAppointments> {
     const {
-      page = 1,
+      page,
+      cursor,
       limit = 20,
       customerId,
       orderId,
@@ -143,10 +147,35 @@ export class AppointmentsService {
       filter.status = status;
     }
 
-    const skip = (page - 1) * limit;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     try {
+      if (page === undefined) {
+        const decoded = cursor ? decodeCursor(cursor, sortBy, sortOrder) : undefined;
+        const cursorFilter = decoded
+          ? withCursorFilter(filter, cursorPredicate(sortBy, 'appointmentId', sortOrder, decoded))
+          : filter;
+        const fetched = await this.appointmentModel
+          .find(cursorFilter)
+          .sort({ [sortBy]: sortDirection, appointmentId: sortDirection })
+          .limit(limit + 1)
+          .exec();
+        const hasNextPage = fetched.length > limit;
+        const appointments = hasNextPage ? fetched.slice(0, limit) : fetched;
+        const last = appointments.at(-1);
+        return {
+          data: appointments,
+          meta: {
+            limit,
+            hasNextPage,
+            nextCursor: hasNextPage && last
+              ? encodeCursor(sortBy, sortOrder, (last as unknown as Record<string, unknown>)[sortBy] as Date | number | string, last.appointmentId)
+              : null,
+          },
+        };
+      }
+
+      const skip = (page - 1) * limit;
       const [appointments, total] = await Promise.all([
         this.appointmentModel
           .find(filter)

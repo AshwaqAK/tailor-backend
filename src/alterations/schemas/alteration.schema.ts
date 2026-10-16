@@ -138,4 +138,5 @@ export class Alteration {
 export const AlterationSchema = SchemaFactory.createForClass(Alteration);
 
 AlterationSchema.index({ customerId: 1, status: 1, createdAt: -1 });
+AlterationSchema.index({ requestDate: -1, alterationId: -1 });
 AlterationSchema.index({ originalOrderId: 1, originalOrderItemId: 1 });
