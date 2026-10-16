@@ -1050,7 +1050,7 @@ describe('ReportsService', () => {
               ? fabricModel
               : tailoringServiceModel;
     model.aggregate.mockReturnValue(aggregation([]));
-    const query = Object.assign(new ReportDateQueryDto(), {
+    const query = Object.assign(new CustomerReportQueryDto(), {
       fromDate: '2026-01-01',
       toDate: '2026-01-31',
     });
@@ -1089,7 +1089,7 @@ describe('ReportsService', () => {
 
   it('supports only fromDate and preserves its timezone instant', async () => {
     customerModel.aggregate.mockReturnValue(aggregation([]));
-    const query = Object.assign(new ReportDateQueryDto(), {
+    const query = Object.assign(new CustomerReportQueryDto(), {
       fromDate: '2026-01-01T00:30:00+05:30',
     });
 
@@ -1107,7 +1107,7 @@ describe('ReportsService', () => {
 
   it('supports only toDate and includes the exact timestamp boundary', async () => {
     orderModel.aggregate.mockReturnValue(aggregation([]));
-    const query = Object.assign(new ReportDateQueryDto(), {
+    const query = Object.assign(new CustomerReportQueryDto(), {
       toDate: '2026-01-31T23:59:59.999Z',
     });
 
@@ -1128,7 +1128,7 @@ describe('ReportsService', () => {
     appointmentModel.aggregate.mockReturnValue(aggregation([]));
     fabricModel.aggregate.mockReturnValue(aggregation([]));
     tailoringServiceModel.aggregate.mockReturnValue(aggregation([]));
-    const query = Object.assign(new ReportDateQueryDto(), {
+    const query = Object.assign(new CustomerReportQueryDto(), {
       fromDate: '2030-01-01',
       toDate: '2030-01-02',
     });

@@ -11,7 +11,7 @@ describe('GarmentTypePricingService', () => {
 
   const garmentType = (groups: unknown[] = []) =>
     ({
-      tailoringService: { basePrice: 100 },
+      tailoringService: { serviceId: 'SRV-000001', basePrice: 100 },
       customizationGroups: groups,
     }) as never;
 
@@ -194,7 +194,7 @@ describe('GarmentTypePricingService', () => {
       },
     ];
     const configuration = garmentType(groups) as {
-      tailoringService: { basePrice: number };
+      tailoringService: { serviceId: string; basePrice: number };
       customizationGroups: typeof groups;
     };
     const snapshot = pricingService.calculateTailoringPricing(
