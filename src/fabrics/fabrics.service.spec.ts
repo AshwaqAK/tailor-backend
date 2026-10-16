@@ -189,7 +189,7 @@ describe('FabricsService', () => {
     fabricModel.find.mockReturnValue({ sort });
     fabricModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
 
-    const result = await service.findAll(new FabricQueryDto());
+    const result = await service.findAll(Object.assign(new FabricQueryDto(), { page: 1 }));
 
     expect(fabricModel.find).toHaveBeenCalledWith({});
     expect(sort).toHaveBeenCalledWith({ createdAt: -1 });

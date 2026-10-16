@@ -92,3 +92,4 @@ export class Appointment {
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
 
 AppointmentSchema.index({ appointmentDate: 1, status: 1, type: 1 });
+AppointmentSchema.index({ appointmentDate: 1, appointmentId: 1 });

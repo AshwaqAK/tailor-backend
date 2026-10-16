@@ -15,14 +15,17 @@ import { ServiceQueryDto } from './dto/service-query.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceCategory } from './enums/service-category.enum';
 import { TailoringService, TailoringServiceDocument } from './schemas/tailoring-service.schema';
+import { cursorPredicate, decodeCursor, encodeCursor, withCursorFilter } from '../common/pagination/cursor';
 
 export interface PaginatedTailoringServices {
   data: TailoringServiceDocument[];
   meta: {
-    page: number;
+    page?: number;
     limit: number;
-    total: number;
-    totalPages: number;
+    total?: number;
+    totalPages?: number;
+    hasNextPage?: boolean;
+    nextCursor?: string | null;
   };
 }
 
@@ -75,7 +78,8 @@ export class ServicesService {
 
   async findAll(query: ServiceQueryDto): Promise<PaginatedTailoringServices> {
     const {
-      page = 1,
+      page,
+      cursor,
       limit = 20,
       name,
       category,
@@ -100,10 +104,35 @@ export class ServicesService {
       filter.isActive = isActive;
     }
 
-    const skip = (page - 1) * limit;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     try {
+      if (page === undefined) {
+        const decoded = cursor ? decodeCursor(cursor, sortBy, sortOrder) : undefined;
+        const cursorFilter = decoded
+          ? withCursorFilter(filter, cursorPredicate(sortBy, 'serviceId', sortOrder, decoded))
+          : filter;
+        const fetched = await this.tailoringServiceModel
+          .find(cursorFilter)
+          .sort({ [sortBy]: sortDirection, serviceId: sortDirection })
+          .limit(limit + 1)
+          .exec();
+        const hasNextPage = fetched.length > limit;
+        const tailoringServices = hasNextPage ? fetched.slice(0, limit) : fetched;
+        const last = tailoringServices.at(-1);
+        return {
+          data: tailoringServices,
+          meta: {
+            limit,
+            hasNextPage,
+            nextCursor: hasNextPage && last
+              ? encodeCursor(sortBy, sortOrder, (last as unknown as Record<string, unknown>)[sortBy] as Date | number | string, last.serviceId)
+              : null,
+          },
+        };
+      }
+
+      const skip = (page - 1) * limit;
       const [tailoringServices, total] = await Promise.all([
         this.tailoringServiceModel
           .find(filter)

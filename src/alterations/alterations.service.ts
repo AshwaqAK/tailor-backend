@@ -23,14 +23,17 @@ import { OrderType } from '../orders/enums/order-type.enum';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { cursorPredicate, decodeCursor, encodeCursor, withCursorFilter } from '../common/pagination/cursor';
 
 export interface PaginatedAlterations {
   data: AlterationDocument[];
   meta: {
-    page: number;
+    page?: number;
     limit: number;
-    total: number;
-    totalPages: number;
+    total?: number;
+    totalPages?: number;
+    hasNextPage?: boolean;
+    nextCursor?: string | null;
   };
 }
 
@@ -116,7 +119,8 @@ export class AlterationsService {
 
   async findAll(query: AlterationQueryDto): Promise<PaginatedAlterations> {
     const {
-      page = 1,
+      page,
+      cursor,
       limit = 20,
       customerId,
       orderId,
@@ -130,10 +134,35 @@ export class AlterationsService {
     if (orderId) filter.originalOrderId = orderId;
     if (status) filter.status = status;
 
-    const skip = (page - 1) * limit;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     try {
+      if (page === undefined) {
+        const decoded = cursor ? decodeCursor(cursor, sortBy, sortOrder) : undefined;
+        const cursorFilter = decoded
+          ? withCursorFilter(filter, cursorPredicate(sortBy, 'alterationId', sortOrder, decoded))
+          : filter;
+        const fetched = await this.alterationModel
+          .find(cursorFilter)
+          .sort({ [sortBy]: sortDirection, alterationId: sortDirection })
+          .limit(limit + 1)
+          .exec();
+        const hasNextPage = fetched.length > limit;
+        const alterations = hasNextPage ? fetched.slice(0, limit) : fetched;
+        const last = alterations.at(-1);
+        return {
+          data: alterations,
+          meta: {
+            limit,
+            hasNextPage,
+            nextCursor: hasNextPage && last
+              ? encodeCursor(sortBy, sortOrder, (last as unknown as Record<string, unknown>)[sortBy] as Date | number | string, last.alterationId)
+              : null,
+          },
+        };
+      }
+
+      const skip = (page - 1) * limit;
       const [alterations, total] = await Promise.all([
         this.alterationModel
           .find(filter)

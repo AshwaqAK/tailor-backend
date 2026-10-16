@@ -124,6 +124,7 @@ PaymentSchema.index({ orderId: 1, status: 1 });
 PaymentSchema.index({ orderId: 1, paidAt: -1 });
 PaymentSchema.index({ customerId: 1, paidAt: -1 });
 PaymentSchema.index({ status: 1, createdAt: -1 });
+PaymentSchema.index({ createdAt: -1, paymentId: -1 });
 PaymentSchema.index(
   { transactionId: 1 },
   {

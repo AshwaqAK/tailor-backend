@@ -18,6 +18,7 @@ import {
   AuditLogDocument,
   sanitizeAuditMetadata,
 } from './schemas/audit-log.schema';
+import { cursorPredicate, decodeCursor, encodeCursor, withCursorFilter } from '../common/pagination/cursor';
 
 export interface RecordAuditLogInput {
   actorId?: string;
@@ -30,10 +31,12 @@ export interface RecordAuditLogInput {
 export interface PaginatedAuditLogs {
   data: AuditLogDocument[];
   meta: {
-    page: number;
+    page?: number;
     limit: number;
-    total: number;
-    totalPages: number;
+    total?: number;
+    totalPages?: number;
+    hasNextPage?: boolean;
+    nextCursor?: string | null;
   };
 }
 
@@ -81,7 +84,7 @@ export class AuditLogsService {
   }
 
   async findAll(query: AuditLogQueryDto): Promise<PaginatedAuditLogs> {
-    const { page = 1, limit = 20 } = query;
+    const { page, cursor, limit = 20 } = query;
     const filter: Record<string, unknown> = {};
 
     if (query.actorId) filter.actorId = query.actorId;
@@ -99,8 +102,31 @@ export class AuditLogsService {
       filter.eventAt = eventAt;
     }
 
-    const skip = (page - 1) * limit;
     try {
+      if (page === undefined) {
+        const decoded = cursor ? decodeCursor(cursor, 'eventAt', 'desc') : undefined;
+        const cursorFilter = decoded
+          ? withCursorFilter(filter, cursorPredicate('eventAt', 'auditId', 'desc', decoded))
+          : filter;
+        const fetched = await this.auditLogModel
+          .find(cursorFilter)
+          .sort({ eventAt: -1, auditId: -1 })
+          .limit(limit + 1)
+          .exec();
+        const hasNextPage = fetched.length > limit;
+        const data = hasNextPage ? fetched.slice(0, limit) : fetched;
+        const last = data.at(-1);
+        return {
+          data,
+          meta: {
+            limit,
+            hasNextPage,
+            nextCursor: hasNextPage && last ? encodeCursor('eventAt', 'desc', last.eventAt, last.auditId) : null,
+          },
+        };
+      }
+
+      const skip = (page - 1) * limit;
       const [data, total] = await Promise.all([
         this.auditLogModel
           .find(filter)

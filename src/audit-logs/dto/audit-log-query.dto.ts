@@ -7,6 +7,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   Validate,
   ValidationArguments,
@@ -51,7 +52,7 @@ export class AuditLogQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -59,6 +60,11 @@ export class AuditLogQueryDto {
   @Min(1)
   @Max(100)
   limit = 20;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 
   @IsOptional()
   @Matches(/^USR-\d{6}$/, { message: 'actorId must be a valid user ID' })
