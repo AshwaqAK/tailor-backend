@@ -109,5 +109,3 @@ export class GarmentType {
 
 export const GarmentTypeSchema = SchemaFactory.createForClass(GarmentType);
 
-GarmentTypeSchema.index({ name: 1 }, { unique: true });
-GarmentTypeSchema.index({ code: 1 }, { unique: true });
