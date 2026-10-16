@@ -91,7 +91,8 @@ export class TailoringPricingSnapshot {
   finalTailoringTotal!: number;
 }
 
-export const TailoringPricingSnapshotSchema = SchemaFactory.createForClass(TailoringPricingSnapshot);
+export const TailoringPricingSnapshotSchema =
+  SchemaFactory.createForClass(TailoringPricingSnapshot);
 
 @Schema({
   _id: false,

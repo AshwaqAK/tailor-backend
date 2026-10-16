@@ -10,6 +10,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import { Fabric, FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
+import { OrderType } from '../orders/enums/order-type.enum';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { PaymentMethod } from '../payments/enums/payment-method.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -70,6 +71,13 @@ interface OrderReportAggregation {
     paidAmount: number;
     outstandingBalance: number;
   }>;
+  classificationFinancial: Array<{
+    _id: OrderType;
+    orderCount: number;
+    orderValue: number;
+    paidAmount: number;
+    outstandingBalance: number;
+  }>;
   composition: Array<{
     _id: OrderComposition;
     orderCount: number;
@@ -84,6 +92,8 @@ interface PaymentReportAggregation {
   refunds: Array<{ total: number }>;
   byStatus: GroupedCount<PaymentStatus>[];
   byMethod: GroupedCount<PaymentMethod>[];
+  byOrderTypeCollections: Array<{ _id: OrderType; total: number }>;
+  byOrderTypeRefunds: Array<{ _id: OrderType; total: number }>;
 }
 
 interface CustomerReportAggregation {
@@ -94,6 +104,14 @@ interface CustomerReportAggregation {
     orderValue: number;
     currentPaidAmount: number;
     currentOutstandingBalance: number;
+    standardOrderCount: number;
+    alterationBillCount: number;
+    standardOrderValue: number;
+    alterationBillValue: number;
+    standardPaidAmount: number;
+    alterationBillPaidAmount: number;
+    standardOutstandingBalance: number;
+    alterationBillOutstandingBalance: number;
   }>;
   customerBreakdown: Array<{
     data: Array<{
@@ -103,6 +121,14 @@ interface CustomerReportAggregation {
       orderValue: number;
       currentPaidAmount: number;
       currentOutstandingBalance: number;
+      standardOrderCount: number;
+      alterationBillCount: number;
+      standardOrderValue: number;
+      alterationBillValue: number;
+      standardPaidAmount: number;
+      alterationBillPaidAmount: number;
+      standardOutstandingBalance: number;
+      alterationBillOutstandingBalance: number;
       latestOrderCreatedAt: Date;
     }>;
     meta: Array<{ total: number }>;
@@ -186,6 +212,44 @@ export class ReportsService {
                   orderValue: { $sum: '$totalAmount' },
                   currentPaidAmount: { $sum: '$paidAmount' },
                   currentOutstandingBalance: { $sum: '$balanceAmount' },
+                  standardOrderCount: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, 1, 0],
+                    },
+                  },
+                  alterationBillCount: {
+                    $sum: { $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, 1, 0] },
+                  },
+                  standardOrderValue: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$totalAmount', 0],
+                    },
+                  },
+                  alterationBillValue: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$totalAmount', 0],
+                    },
+                  },
+                  standardPaidAmount: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$paidAmount', 0],
+                    },
+                  },
+                  alterationBillPaidAmount: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$paidAmount', 0],
+                    },
+                  },
+                  standardOutstandingBalance: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$balanceAmount', 0],
+                    },
+                  },
+                  alterationBillOutstandingBalance: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$balanceAmount', 0],
+                    },
+                  },
                 },
               },
               {
@@ -198,6 +262,16 @@ export class ReportsService {
                   orderValue: { $sum: '$orderValue' },
                   currentPaidAmount: { $sum: '$currentPaidAmount' },
                   currentOutstandingBalance: { $sum: '$currentOutstandingBalance' },
+                  standardOrderCount: { $sum: '$standardOrderCount' },
+                  alterationBillCount: { $sum: '$alterationBillCount' },
+                  standardOrderValue: { $sum: '$standardOrderValue' },
+                  alterationBillValue: { $sum: '$alterationBillValue' },
+                  standardPaidAmount: { $sum: '$standardPaidAmount' },
+                  alterationBillPaidAmount: { $sum: '$alterationBillPaidAmount' },
+                  standardOutstandingBalance: { $sum: '$standardOutstandingBalance' },
+                  alterationBillOutstandingBalance: {
+                    $sum: '$alterationBillOutstandingBalance',
+                  },
                 },
               },
             ],
@@ -210,6 +284,42 @@ export class ReportsService {
                   orderValue: { $sum: '$totalAmount' },
                   currentPaidAmount: { $sum: '$paidAmount' },
                   currentOutstandingBalance: { $sum: '$balanceAmount' },
+                  standardOrderCount: {
+                    $sum: { $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, 1, 0] },
+                  },
+                  alterationBillCount: {
+                    $sum: { $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, 1, 0] },
+                  },
+                  standardOrderValue: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$totalAmount', 0],
+                    },
+                  },
+                  alterationBillValue: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$totalAmount', 0],
+                    },
+                  },
+                  standardPaidAmount: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$paidAmount', 0],
+                    },
+                  },
+                  alterationBillPaidAmount: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$paidAmount', 0],
+                    },
+                  },
+                  standardOutstandingBalance: {
+                    $sum: {
+                      $cond: [{ $ne: ['$orderType', OrderType.ALTERATION] }, '$balanceAmount', 0],
+                    },
+                  },
+                  alterationBillOutstandingBalance: {
+                    $sum: {
+                      $cond: [{ $eq: ['$orderType', OrderType.ALTERATION] }, '$balanceAmount', 0],
+                    },
+                  },
                   latestOrderCreatedAt: { $max: '$createdAt' },
                 },
               },
@@ -230,6 +340,14 @@ export class ReportsService {
                   orderValue: 1,
                   currentPaidAmount: 1,
                   currentOutstandingBalance: 1,
+                  standardOrderCount: 1,
+                  alterationBillCount: 1,
+                  standardOrderValue: 1,
+                  alterationBillValue: 1,
+                  standardPaidAmount: 1,
+                  alterationBillPaidAmount: 1,
+                  standardOutstandingBalance: 1,
+                  alterationBillOutstandingBalance: 1,
                   latestOrderCreatedAt: 1,
                 },
               },
@@ -260,6 +378,14 @@ export class ReportsService {
       orderValue: commercialSummary?.orderValue ?? 0,
       currentPaidAmount: commercialSummary?.currentPaidAmount ?? 0,
       currentOutstandingBalance: commercialSummary?.currentOutstandingBalance ?? 0,
+      standardOrderCount: commercialSummary?.standardOrderCount ?? 0,
+      alterationBillCount: commercialSummary?.alterationBillCount ?? 0,
+      standardOrderValue: commercialSummary?.standardOrderValue ?? 0,
+      alterationBillValue: commercialSummary?.alterationBillValue ?? 0,
+      standardPaidAmount: commercialSummary?.standardPaidAmount ?? 0,
+      alterationBillPaidAmount: commercialSummary?.alterationBillPaidAmount ?? 0,
+      standardOutstandingBalance: commercialSummary?.standardOutstandingBalance ?? 0,
+      alterationBillOutstandingBalance: commercialSummary?.alterationBillOutstandingBalance ?? 0,
       customerBreakdown: {
         data: breakdown?.data ?? [],
         meta: {
@@ -293,8 +419,21 @@ export class ReportsService {
                 },
               },
             ],
+            classificationFinancial: [
+              ...this.buildOrderMatchStages(query),
+              {
+                $group: {
+                  _id: { $ifNull: ['$orderType', OrderType.STANDARD] },
+                  orderCount: { $sum: 1 },
+                  orderValue: { $sum: '$totalAmount' },
+                  paidAmount: { $sum: '$paidAmount' },
+                  outstandingBalance: { $sum: '$balanceAmount' },
+                },
+              },
+            ],
             composition: [
               ...this.buildOrderMatchStages(query),
+              { $match: { orderType: { $ne: OrderType.ALTERATION } } },
               {
                 $lookup: {
                   from: 'orderitems',
@@ -362,11 +501,15 @@ export class ReportsService {
                     $switch: {
                       branches: [
                         {
-                          case: { $and: [{ $eq: ['$hasTailoring', 1] }, { $eq: ['$hasFabricSale', 0] }] },
+                          case: {
+                            $and: [{ $eq: ['$hasTailoring', 1] }, { $eq: ['$hasFabricSale', 0] }],
+                          },
                           then: 'TAILORING_ONLY',
                         },
                         {
-                          case: { $and: [{ $eq: ['$hasTailoring', 0] }, { $eq: ['$hasFabricSale', 1] }] },
+                          case: {
+                            $and: [{ $eq: ['$hasTailoring', 0] }, { $eq: ['$hasFabricSale', 1] }],
+                          },
                           then: 'FABRIC_SALE_ONLY',
                         },
                       ],
@@ -406,6 +549,28 @@ export class ReportsService {
     }
 
     const financial = aggregation?.financial[0];
+    const classification = {
+      [OrderType.STANDARD]: {
+        orderCount: 0,
+        orderValue: 0,
+        paidAmount: 0,
+        outstandingBalance: 0,
+      },
+      [OrderType.ALTERATION]: {
+        orderCount: 0,
+        orderValue: 0,
+        paidAmount: 0,
+        outstandingBalance: 0,
+      },
+    };
+    for (const result of aggregation?.classificationFinancial ?? []) {
+      classification[result._id] = {
+        orderCount: result.orderCount,
+        orderValue: result.orderValue,
+        paidAmount: result.paidAmount,
+        outstandingBalance: result.outstandingBalance,
+      };
+    }
     const composition = {
       tailoringOnly: 0,
       fabricSaleOnly: 0,
@@ -439,6 +604,7 @@ export class ReportsService {
       orderValue: financial?.orderValue ?? 0,
       paidAmount: financial?.paidAmount ?? 0,
       outstandingBalance: financial?.outstandingBalance ?? 0,
+      classification,
       composition,
     };
   }
@@ -494,6 +660,52 @@ export class ReportsService {
               { $match: this.buildPaymentFilter(query, 'paidAt') },
               { $group: { _id: '$paymentMethod', count: { $sum: 1 } } },
             ],
+            byOrderTypeCollections: [
+              {
+                $match: {
+                  ...this.buildPaymentFilter(query, 'paidAt'),
+                  status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] },
+                },
+              },
+              {
+                $lookup: {
+                  from: 'orders',
+                  localField: 'orderId',
+                  foreignField: 'orderId',
+                  as: 'order',
+                },
+              },
+              { $unwind: '$order' },
+              {
+                $group: {
+                  _id: { $ifNull: ['$order.orderType', OrderType.STANDARD] },
+                  total: { $sum: '$amount' },
+                },
+              },
+            ],
+            byOrderTypeRefunds: [
+              {
+                $match: {
+                  ...this.buildPaymentFilter(query, 'refundedAt'),
+                  status: PaymentStatus.REFUNDED,
+                },
+              },
+              {
+                $lookup: {
+                  from: 'orders',
+                  localField: 'orderId',
+                  foreignField: 'orderId',
+                  as: 'order',
+                },
+              },
+              { $unwind: '$order' },
+              {
+                $group: {
+                  _id: { $ifNull: ['$order.orderType', OrderType.STANDARD] },
+                  total: { $sum: '$amount' },
+                },
+              },
+            ],
           },
         },
       ])
@@ -520,6 +732,17 @@ export class ReportsService {
       byMethod[result._id] = result.count;
     }
 
+    const byOrderType: PaymentReport['byOrderType'] = {
+      [OrderType.STANDARD]: { grossCollections: 0, refunds: 0 },
+      [OrderType.ALTERATION]: { grossCollections: 0, refunds: 0 },
+    };
+    for (const result of aggregation?.byOrderTypeCollections ?? []) {
+      byOrderType[result._id].grossCollections = result.total;
+    }
+    for (const result of aggregation?.byOrderTypeRefunds ?? []) {
+      byOrderType[result._id].refunds = result.total;
+    }
+
     const grossCollections = aggregation?.grossCollections[0]?.total ?? 0;
     const refunds = aggregation?.refunds[0]?.total ?? 0;
 
@@ -528,6 +751,7 @@ export class ReportsService {
       refunds,
       netCollections: Number((grossCollections - refunds).toFixed(2)),
       paymentCounts: { byStatus, byMethod },
+      byOrderType,
     };
   }
 
@@ -668,9 +892,7 @@ export class ReportsService {
     };
   }
 
-  async getFabricSalesReport(
-    query: FabricSalesReportQueryDto,
-  ): Promise<FabricSalesReport> {
+  async getFabricSalesReport(query: FabricSalesReportQueryDto): Promise<FabricSalesReport> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -689,9 +911,7 @@ export class ReportsService {
         {
           $match: {
             'items.itemType': 'FABRIC_SALE',
-            ...(query.fabricId
-              ? { 'items.fabricSaleSnapshot.fabricId': query.fabricId }
-              : {}),
+            ...(query.fabricId ? { 'items.fabricSaleSnapshot.fabricId': query.fabricId } : {}),
           },
         },
         {
@@ -847,9 +1067,7 @@ export class ReportsService {
     };
   }
 
-  async getServiceUsageReport(
-    query: ServiceUsageReportQueryDto,
-  ): Promise<ServiceUsageReport> {
+  async getServiceUsageReport(query: ServiceUsageReportQueryDto): Promise<ServiceUsageReport> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -869,9 +1087,7 @@ export class ReportsService {
           $match: {
             'items.itemType': { $ne: 'FABRIC_SALE' },
             'items.serviceSnapshot.serviceId': { $exists: true },
-            ...(query.serviceId
-              ? { 'items.serviceSnapshot.serviceId': query.serviceId }
-              : {}),
+            ...(query.serviceId ? { 'items.serviceSnapshot.serviceId': query.serviceId } : {}),
           },
         },
         {

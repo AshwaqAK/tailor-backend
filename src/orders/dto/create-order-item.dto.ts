@@ -63,7 +63,8 @@ export class CreateOrderItemDto {
   }
 
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.garmentTypeId !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.garmentTypeId !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsString()
@@ -74,7 +75,8 @@ export class CreateOrderItemDto {
 
   @IsOptional()
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.clothingType !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.clothingType !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsEnum(ClothingType)
@@ -86,7 +88,8 @@ export class CreateOrderItemDto {
   quantity!: number;
 
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.unitPrice !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.unitPrice !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsNumber()
@@ -95,14 +98,16 @@ export class CreateOrderItemDto {
 
   @IsOptional()
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.customizations !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.customizations !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsObject()
   customizations?: Record<string, unknown>;
 
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.measurementId !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.measurementId !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsMongoId()
@@ -110,7 +115,8 @@ export class CreateOrderItemDto {
 
   @IsOptional()
   @ValidateIf(
-    (item: CreateOrderItemDto) => item.itemType !== OrderItemType.FABRIC_SALE || item.serviceId !== undefined,
+    (item: CreateOrderItemDto) =>
+      item.itemType !== OrderItemType.FABRIC_SALE || item.serviceId !== undefined,
   )
   @Validate(TailoringOnlyFieldConstraint)
   @IsString()

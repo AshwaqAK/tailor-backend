@@ -40,9 +40,9 @@ describe('GarmentTypePricingService', () => {
       },
     ];
 
-    expect(pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Spread' }, 1)).toBe(
-      125,
-    );
+    expect(
+      pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Spread' }, 1),
+    ).toBe(125);
   });
 
   it('adds multiple selected customization options', () => {
@@ -58,9 +58,13 @@ describe('GarmentTypePricingService', () => {
     ];
 
     expect(
-      pricingService.calculateTailoringTotal(garmentType(groups), {
-        Details: ['Pocket', 'Cuff'],
-      }, 1),
+      pricingService.calculateTailoringTotal(
+        garmentType(groups),
+        {
+          Details: ['Pocket', 'Cuff'],
+        },
+        1,
+      ),
     ).toBe(125);
   });
 
@@ -73,9 +77,9 @@ describe('GarmentTypePricingService', () => {
       },
     ];
 
-    expect(
-      pricingService.calculateTailoringTotal(garmentType(groups), { Embroidery: 3 }, 1),
-    ).toBe(115);
+    expect(pricingService.calculateTailoringTotal(garmentType(groups), { Embroidery: 3 }, 1)).toBe(
+      115,
+    );
   });
 
   it('rejects unknown groups and options', () => {
@@ -87,12 +91,12 @@ describe('GarmentTypePricingService', () => {
       },
     ];
 
-    expect(() => pricingService.calculateTailoringTotal(garmentType(groups), { Sleeve: 'Short' }, 1)).toThrow(
-      new BadRequestException('Unknown customization group: Sleeve'),
-    );
-    expect(() => pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Mandarin' }, 1)).toThrow(
-      new BadRequestException('Unknown customization option: Mandarin in group Collar'),
-    );
+    expect(() =>
+      pricingService.calculateTailoringTotal(garmentType(groups), { Sleeve: 'Short' }, 1),
+    ).toThrow(new BadRequestException('Unknown customization group: Sleeve'));
+    expect(() =>
+      pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Mandarin' }, 1),
+    ).toThrow(new BadRequestException('Unknown customization option: Mandarin in group Collar'));
   });
 
   it('rejects invalid customization value types', () => {
@@ -104,9 +108,9 @@ describe('GarmentTypePricingService', () => {
       },
     ];
 
-    expect(() => pricingService.calculateTailoringTotal(garmentType(groups), { Collar: true }, 1)).toThrow(
-      new BadRequestException('Invalid value type for customization group: Collar'),
-    );
+    expect(() =>
+      pricingService.calculateTailoringTotal(garmentType(groups), { Collar: true }, 1),
+    ).toThrow(new BadRequestException('Invalid value type for customization group: Collar'));
   });
 
   it('applies the total tailoring price for every garment quantity', () => {
@@ -118,9 +122,9 @@ describe('GarmentTypePricingService', () => {
       },
     ];
 
-    expect(pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Spread' }, 3)).toBe(
-      375,
-    );
+    expect(
+      pricingService.calculateTailoringTotal(garmentType(groups), { Collar: 'Spread' }, 3),
+    ).toBe(375);
   });
 
   it('keeps zero-price options free and text options automatically free', () => {
@@ -189,8 +193,15 @@ describe('GarmentTypePricingService', () => {
         options: [option('Spread', InputType.SINGLE_SELECT, 25, PricingType.FIXED)],
       },
     ];
-    const configuration = garmentType(groups) as { tailoringService: { basePrice: number }; customizationGroups: typeof groups };
-    const snapshot = pricingService.calculateTailoringPricing(configuration, { Collar: 'Spread' }, 1);
+    const configuration = garmentType(groups) as {
+      tailoringService: { basePrice: number };
+      customizationGroups: typeof groups;
+    };
+    const snapshot = pricingService.calculateTailoringPricing(
+      configuration,
+      { Collar: 'Spread' },
+      1,
+    );
 
     configuration.tailoringService.basePrice = 999;
     configuration.customizationGroups[0].options[0].price = 999;

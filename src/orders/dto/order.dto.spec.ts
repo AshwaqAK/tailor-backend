@@ -25,9 +25,7 @@ describe('Order DTO validation', () => {
   const validOrder = () => ({
     customerId: 'CUS-000001',
     orderDate: '2026-01-01T00:00:00.000Z',
-    items: [
-      validTailoringItem(),
-    ],
+    items: [validTailoringItem()],
   });
 
   const validateItem = (item: Record<string, unknown>) =>
@@ -89,15 +87,15 @@ describe('Order DTO validation', () => {
   });
 
   it('requires tailoring fields for TAILORING items', async () => {
-    await expect(errorProperties({ itemType: OrderItemType.TAILORING, quantity: 1 })).resolves.toEqual(
-      expect.arrayContaining(['garmentTypeId', 'unitPrice', 'measurementId']),
-    );
+    await expect(
+      errorProperties({ itemType: OrderItemType.TAILORING, quantity: 1 }),
+    ).resolves.toEqual(expect.arrayContaining(['garmentTypeId', 'unitPrice', 'measurementId']));
   });
 
   it('rejects fractional tailoring quantities', async () => {
-    await expect(
-      errorProperties({ ...validTailoringItem(), quantity: 1.25 }),
-    ).resolves.toContain('quantity');
+    await expect(errorProperties({ ...validTailoringItem(), quantity: 1.25 })).resolves.toContain(
+      'quantity',
+    );
   });
 
   it('rejects tailoring-specific fields on FABRIC_SALE items', async () => {
@@ -126,9 +124,9 @@ describe('Order DTO validation', () => {
   });
 
   it('rejects an invalid itemType', async () => {
-    await expect(errorProperties({ ...validTailoringItem(), itemType: 'INVALID' })).resolves.toContain(
-      'itemType',
-    );
+    await expect(
+      errorProperties({ ...validTailoringItem(), itemType: 'INVALID' }),
+    ).resolves.toContain('itemType');
   });
 
   it('accepts a valid order and nested item', async () => {

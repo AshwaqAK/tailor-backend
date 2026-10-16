@@ -9,6 +9,7 @@ import type { CustomerDocument } from '../customers/schemas/customer.schema';
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
+import { OrderType } from '../orders/enums/order-type.enum';
 import type { OrderDocument } from '../orders/schemas/order.schema';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import type { PaymentDocument } from '../payments/schemas/payment.schema';
@@ -78,6 +79,10 @@ describe('DashboardService', () => {
       aggregation([
         {
           ordersToday: [{ count: 3 }],
+          classificationToday: [
+            { _id: OrderType.STANDARD, count: 2 },
+            { _id: OrderType.ALTERATION, count: 1 },
+          ],
           statusCounts: [
             { _id: OrderStatus.DRAFT, count: 2 },
             { _id: OrderStatus.CONFIRMED, count: 3 },
@@ -87,7 +92,15 @@ describe('DashboardService', () => {
             { _id: OrderStatus.CANCELLED, count: 2 },
           ],
           orderValue: [{ total: 18000 }],
+          orderValueByType: [
+            { _id: OrderType.STANDARD, total: 15000 },
+            { _id: OrderType.ALTERATION, total: 3000 },
+          ],
           outstanding: [{ total: 7000, orderCount: 9 }],
+          outstandingByType: [
+            { _id: OrderType.STANDARD, total: 5000, orderCount: 7 },
+            { _id: OrderType.ALTERATION, total: 2000, orderCount: 2 },
+          ],
           recentOrders: [
             {
               orderId: 'ORD-000001',
@@ -97,6 +110,7 @@ describe('DashboardService', () => {
               paidAmount: 500,
               balanceAmount: 1500,
               status: OrderStatus.IN_PROGRESS,
+              orderType: OrderType.STANDARD,
               createdAt: new Date('2026-09-30T18:00:00.000Z'),
             },
           ],
@@ -179,8 +193,12 @@ describe('DashboardService', () => {
       tailoringServicesByActivity: { active: 9, inactive: 1 },
       lowStockFabrics: { count: 2, threshold: 5 },
       ordersToday: 3,
+      standardOrdersToday: 2,
+      alterationBillsToday: 1,
       orderValue: 18000,
-      outstanding: { total: 7000, orderCount: 9 },
+      standardOrderValue: 15000,
+      alterationBillValue: 3000,
+      outstanding: { total: 7000, orderCount: 9, standardTotal: 5000, alterationBillTotal: 2000 },
       recentOrders: [
         {
           orderId: 'ORD-000001',
@@ -190,6 +208,7 @@ describe('DashboardService', () => {
           paidAmount: 500,
           balanceAmount: 1500,
           status: OrderStatus.IN_PROGRESS,
+          orderType: OrderType.STANDARD,
           createdAt: new Date('2026-09-30T18:00:00.000Z'),
         },
       ],
@@ -204,6 +223,8 @@ describe('DashboardService', () => {
         tailoringAmount: 10000,
         attachedFabricAmount: 2500,
         fabricSaleAmount: 5500,
+        standardOrderValue: 15000,
+        alterationBillAmount: 3000,
         totalOrderValue: 18000,
       },
     });
@@ -264,7 +285,12 @@ describe('DashboardService', () => {
     expect(Object.values(result.appointmentsByStatus)).toEqual([0, 0, 0, 0, 0]);
     expect(result.ordersToday).toBe(0);
     expect(result.orderValue).toBe(0);
-    expect(result.outstanding).toEqual({ total: 0, orderCount: 0 });
+    expect(result.outstanding).toEqual({
+      total: 0,
+      orderCount: 0,
+      standardTotal: 0,
+      alterationBillTotal: 0,
+    });
     expect(result.recentOrders).toEqual([]);
     expect(result.fabricStock).toEqual({
       activeFabricCount: 0,
@@ -276,6 +302,8 @@ describe('DashboardService', () => {
       tailoringAmount: 0,
       attachedFabricAmount: 0,
       fabricSaleAmount: 0,
+      standardOrderValue: 0,
+      alterationBillAmount: 0,
       totalOrderValue: 0,
     });
   });
@@ -288,6 +316,7 @@ describe('DashboardService', () => {
           ordersToday: [],
           statusCounts: [],
           orderValue: [{ total: 1800 }],
+          orderValueByType: [{ _id: OrderType.STANDARD, total: 1800 }],
           outstanding: [],
           recentOrders: [],
           salesMix: [
@@ -312,11 +341,15 @@ describe('DashboardService', () => {
       tailoringAmount: 1000,
       attachedFabricAmount: 300,
       fabricSaleAmount: 500,
+      standardOrderValue: 1800,
+      alterationBillAmount: 0,
       totalOrderValue: 1800,
     });
-    expect(result.salesMix.tailoringAmount + result.salesMix.attachedFabricAmount + result.salesMix.fabricSaleAmount).toBe(
-      result.salesMix.totalOrderValue,
-    );
+    expect(
+      result.salesMix.tailoringAmount +
+        result.salesMix.attachedFabricAmount +
+        result.salesMix.fabricSaleAmount,
+    ).toBe(result.salesMix.totalOrderValue);
   });
 
   it('uses the same selected order date range for sales mix and order value', async () => {
@@ -448,7 +481,9 @@ describe('DashboardService', () => {
   it('includes only successful payments inside the selected paidAt range', async () => {
     customerModel.aggregate.mockReturnValue(aggregation([]));
     orderModel.aggregate.mockReturnValue(
-      aggregation([{ ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] }]),
+      aggregation([
+        { ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] },
+      ]),
     );
     paymentModel.aggregate.mockReturnValue(aggregation([{ total: 1750 }]));
     appointmentModel.aggregate.mockReturnValue(aggregation([]));
@@ -482,7 +517,9 @@ describe('DashboardService', () => {
   it('excludes pending, failed, and refunded payments through the status match', async () => {
     customerModel.aggregate.mockReturnValue(aggregation([]));
     orderModel.aggregate.mockReturnValue(
-      aggregation([{ ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] }]),
+      aggregation([
+        { ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] },
+      ]),
     );
     appointmentModel.aggregate.mockReturnValue(aggregation([]));
     appointmentModel.countDocuments.mockReturnValue(aggregation(0));
@@ -523,7 +560,9 @@ describe('DashboardService', () => {
   it('uses the current UTC day boundaries for ordersToday', async () => {
     customerModel.aggregate.mockReturnValue(aggregation([]));
     orderModel.aggregate.mockReturnValue(
-      aggregation([{ ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] }]),
+      aggregation([
+        { ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] },
+      ]),
     );
     appointmentModel.aggregate.mockReturnValue(aggregation([]));
     appointmentModel.countDocuments.mockReturnValue(aggregation(0));
@@ -550,7 +589,9 @@ describe('DashboardService', () => {
   it('requests non-cancelled outstanding balances and customer details for five recent orders', async () => {
     customerModel.aggregate.mockReturnValue(aggregation([]));
     orderModel.aggregate.mockReturnValue(
-      aggregation([{ ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] }]),
+      aggregation([
+        { ordersToday: [], statusCounts: [], orderValue: [], outstanding: [], recentOrders: [] },
+      ]),
     );
     appointmentModel.aggregate.mockReturnValue(aggregation([]));
     appointmentModel.countDocuments.mockReturnValue(aggregation(0));

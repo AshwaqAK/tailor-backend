@@ -1,6 +1,7 @@
 import { AppointmentStatus } from '../../appointments/enums/appointment-status.enum';
 import { QuantityUnit } from '../../fabrics/enums/quantity-unit.enum';
 import { OrderStatus } from '../../orders/enums/order-status.enum';
+import { OrderType } from '../../orders/enums/order-type.enum';
 
 export interface ActivityBreakdown {
   active: number;
@@ -28,10 +29,16 @@ export interface DashboardSummary {
     threshold: number;
   };
   ordersToday: number;
+  standardOrdersToday: number;
+  alterationBillsToday: number;
   orderValue: number;
+  standardOrderValue: number;
+  alterationBillValue: number;
   outstanding: {
     total: number;
     orderCount: number;
+    standardTotal: number;
+    alterationBillTotal: number;
   };
   recentOrders: RecentOrder[];
   revenue: {
@@ -50,6 +57,8 @@ export interface DashboardSummary {
     tailoringAmount: number;
     attachedFabricAmount: number;
     fabricSaleAmount: number;
+    standardOrderValue: number;
+    alterationBillAmount: number;
     totalOrderValue: number;
   };
 }
@@ -62,5 +71,6 @@ export interface RecentOrder {
   paidAmount: number;
   balanceAmount: number;
   status: OrderStatus;
+  orderType: OrderType;
   createdAt: Date;
 }

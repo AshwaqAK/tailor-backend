@@ -9,6 +9,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import { Fabric, FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
+import { OrderType } from '../orders/enums/order-type.enum';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
@@ -26,9 +27,12 @@ interface GroupedCount<T> {
 
 interface OrderDashboardAggregation {
   ordersToday: Array<{ count: number }>;
+  classificationToday: GroupedCount<OrderType>[];
   statusCounts: GroupedCount<OrderStatus>[];
   orderValue: Array<{ total: number }>;
+  orderValueByType: Array<{ _id: OrderType; total: number }>;
   outstanding: Array<{ total: number; orderCount: number }>;
+  outstandingByType: Array<{ _id: OrderType; total: number; orderCount: number }>;
   recentOrders: Array<{
     orderId: string;
     customerId: string;
@@ -37,6 +41,7 @@ interface OrderDashboardAggregation {
     paidAmount: number;
     balanceAmount: number;
     status: OrderStatus;
+    orderType: OrderType;
     createdAt: Date;
   }>;
   salesMix: Array<SalesMixAggregation>;
@@ -81,7 +86,9 @@ export class DashboardService {
     private readonly tailoringServiceModel: Model<TailoringServiceDocument>,
   ) {}
 
-  async getSummary(query: ReportDateQueryDto = new ReportDateQueryDto()): Promise<DashboardSummary> {
+  async getSummary(
+    query: ReportDateQueryDto = new ReportDateQueryDto(),
+  ): Promise<DashboardSummary> {
     const startOfToday = new Date();
     startOfToday.setUTCHours(0, 0, 0, 0);
     const startOfTomorrow = new Date(startOfToday);
@@ -102,130 +109,165 @@ export class DashboardService {
       this.customerModel
         .aggregate<GroupedCount<boolean>>([{ $group: { _id: '$isActive', count: { $sum: 1 } } }])
         .exec(),
-      this.orderModel.aggregate<OrderDashboardAggregation>([
-        {
-          $facet: {
-            ordersToday: [
-              {
-                $match: {
-                  createdAt: { $gte: startOfToday, $lt: startOfTomorrow },
-                },
-              },
-              { $count: 'count' },
-            ],
-            statusCounts: [
-              ...this.buildDateMatchStages(query),
-              { $group: { _id: '$status', count: { $sum: 1 } } },
-            ],
-            orderValue: [
-              ...this.buildDateMatchStages(query),
-              { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-            ],
-            outstanding: [
-              { $match: { status: { $ne: OrderStatus.CANCELLED } } },
-              {
-                $group: {
-                  _id: null,
-                  total: { $sum: '$balanceAmount' },
-                  orderCount: { $sum: 1 },
-                },
-              },
-            ],
-            recentOrders: [
-              { $sort: { createdAt: -1 } },
-              { $limit: 5 },
-              {
-                $lookup: {
-                  from: 'customers',
-                  localField: 'customerId',
-                  foreignField: 'customerId',
-                  as: 'customer',
-                },
-              },
-              {
-                $project: {
-                  _id: 0,
-                  orderId: 1,
-                  customerId: 1,
-                  customerName: { $arrayElemAt: ['$customer.name', 0] },
-                  totalAmount: 1,
-                  paidAmount: 1,
-                  balanceAmount: 1,
-                  status: 1,
-                  createdAt: 1,
-                },
-              },
-            ],
-            salesMix: [
-              ...this.buildDateMatchStages(query),
-              {
-                $lookup: {
-                  from: 'orderitems',
-                  localField: 'orderId',
-                  foreignField: 'orderId',
-                  as: 'items',
-                },
-              },
-              { $unwind: '$items' },
-              {
-                $group: {
-                  _id: null,
-                  tailoringAmount: {
-                    $sum: {
-                      $cond: [
-                        { $eq: ['$items.itemType', 'FABRIC_SALE'] },
-                        0,
-                        {
-                          $ifNull: [
-                            '$items.tailoringPricingSnapshot.finalTailoringTotal',
-                            { $multiply: ['$items.unitPrice', '$items.quantity'] },
-                          ],
-                        },
-                      ],
-                    },
-                  },
-                  attachedFabricAmount: {
-                    $sum: {
-                      $cond: [
-                        {
-                          $and: [
-                            { $ne: ['$items.itemType', 'FABRIC_SALE'] },
-                            { $ne: ['$items.fabricSnapshot', null] },
-                          ],
-                        },
-                        {
-                          $multiply: [
-                            '$items.fabricSnapshot.pricePerUnit',
-                            '$items.fabricSnapshot.quantityUsed',
-                          ],
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  fabricSaleAmount: {
-                    $sum: {
-                      $cond: [
-                        { $eq: ['$items.itemType', 'FABRIC_SALE'] },
-                        { $ifNull: ['$items.fabricSaleSnapshot.lineTotal', 0] },
-                        0,
-                      ],
-                    },
+      this.orderModel
+        .aggregate<OrderDashboardAggregation>([
+          {
+            $facet: {
+              ordersToday: [
+                {
+                  $match: {
+                    createdAt: { $gte: startOfToday, $lt: startOfTomorrow },
                   },
                 },
-              },
-              {
-                $project: {
-                  _id: 0,
-                  tailoringAmount: { $round: ['$tailoringAmount', 2] },
-                  attachedFabricAmount: { $round: ['$attachedFabricAmount', 2] },
-                  fabricSaleAmount: { $round: ['$fabricSaleAmount', 2] },
+                { $count: 'count' },
+              ],
+              classificationToday: [
+                {
+                  $match: {
+                    createdAt: { $gte: startOfToday, $lt: startOfTomorrow },
+                  },
                 },
-              },
-            ],
+                {
+                  $group: {
+                    _id: { $ifNull: ['$orderType', OrderType.STANDARD] },
+                    count: { $sum: 1 },
+                  },
+                },
+              ],
+              statusCounts: [
+                ...this.buildDateMatchStages(query),
+                { $group: { _id: '$status', count: { $sum: 1 } } },
+              ],
+              orderValue: [
+                ...this.buildDateMatchStages(query),
+                { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+              ],
+              orderValueByType: [
+                ...this.buildDateMatchStages(query),
+                {
+                  $group: {
+                    _id: { $ifNull: ['$orderType', OrderType.STANDARD] },
+                    total: { $sum: '$totalAmount' },
+                  },
+                },
+              ],
+              outstanding: [
+                { $match: { status: { $ne: OrderStatus.CANCELLED } } },
+                {
+                  $group: {
+                    _id: null,
+                    total: { $sum: '$balanceAmount' },
+                    orderCount: { $sum: 1 },
+                  },
+                },
+              ],
+              outstandingByType: [
+                { $match: { status: { $ne: OrderStatus.CANCELLED } } },
+                {
+                  $group: {
+                    _id: { $ifNull: ['$orderType', OrderType.STANDARD] },
+                    total: { $sum: '$balanceAmount' },
+                    orderCount: { $sum: 1 },
+                  },
+                },
+              ],
+              recentOrders: [
+                { $sort: { createdAt: -1 } },
+                { $limit: 5 },
+                {
+                  $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: 'customerId',
+                    as: 'customer',
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    orderId: 1,
+                    customerId: 1,
+                    customerName: { $arrayElemAt: ['$customer.name', 0] },
+                    totalAmount: 1,
+                    paidAmount: 1,
+                    balanceAmount: 1,
+                    status: 1,
+                    orderType: { $ifNull: ['$orderType', OrderType.STANDARD] },
+                    createdAt: 1,
+                  },
+                },
+              ],
+              salesMix: [
+                ...this.buildDateMatchStages(query),
+                {
+                  $lookup: {
+                    from: 'orderitems',
+                    localField: 'orderId',
+                    foreignField: 'orderId',
+                    as: 'items',
+                  },
+                },
+                { $unwind: '$items' },
+                {
+                  $group: {
+                    _id: null,
+                    tailoringAmount: {
+                      $sum: {
+                        $cond: [
+                          { $eq: ['$items.itemType', 'FABRIC_SALE'] },
+                          0,
+                          {
+                            $ifNull: [
+                              '$items.tailoringPricingSnapshot.finalTailoringTotal',
+                              { $multiply: ['$items.unitPrice', '$items.quantity'] },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                    attachedFabricAmount: {
+                      $sum: {
+                        $cond: [
+                          {
+                            $and: [
+                              { $ne: ['$items.itemType', 'FABRIC_SALE'] },
+                              { $ne: ['$items.fabricSnapshot', null] },
+                            ],
+                          },
+                          {
+                            $multiply: [
+                              '$items.fabricSnapshot.pricePerUnit',
+                              '$items.fabricSnapshot.quantityUsed',
+                            ],
+                          },
+                          0,
+                        ],
+                      },
+                    },
+                    fabricSaleAmount: {
+                      $sum: {
+                        $cond: [
+                          { $eq: ['$items.itemType', 'FABRIC_SALE'] },
+                          { $ifNull: ['$items.fabricSaleSnapshot.lineTotal', 0] },
+                          0,
+                        ],
+                      },
+                    },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    tailoringAmount: { $round: ['$tailoringAmount', 2] },
+                    attachedFabricAmount: { $round: ['$attachedFabricAmount', 2] },
+                    fabricSaleAmount: { $round: ['$fabricSaleAmount', 2] },
+                  },
+                },
+              ],
+            },
           },
-        },
-      ]).exec(),
+        ])
+        .exec(),
       this.appointmentModel
         .aggregate<GroupedCount<AppointmentStatus>>([
           { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -285,9 +327,12 @@ export class DashboardService {
     };
     const orderDashboardResult = orderDashboard[0] ?? {
       ordersToday: [],
+      classificationToday: [],
       statusCounts: [],
       orderValue: [],
+      orderValueByType: [],
       outstanding: [],
+      outstandingByType: [],
       recentOrders: [],
       salesMix: [],
     };
@@ -331,6 +376,31 @@ export class DashboardService {
       0,
     );
 
+    const standardOrdersToday =
+      (orderDashboardResult.classificationToday ?? []).find(
+        (result) => result._id === OrderType.STANDARD,
+      )?.count ?? 0;
+    const alterationBillsToday =
+      (orderDashboardResult.classificationToday ?? []).find(
+        (result) => result._id === OrderType.ALTERATION,
+      )?.count ?? 0;
+    const standardOrderValue =
+      (orderDashboardResult.orderValueByType ?? []).find(
+        (result) => result._id === OrderType.STANDARD,
+      )?.total ?? 0;
+    const alterationBillValue =
+      (orderDashboardResult.orderValueByType ?? []).find(
+        (result) => result._id === OrderType.ALTERATION,
+      )?.total ?? 0;
+    const standardOutstanding =
+      (orderDashboardResult.outstandingByType ?? []).find(
+        (result) => result._id === OrderType.STANDARD,
+      )?.total ?? 0;
+    const alterationBillOutstanding =
+      (orderDashboardResult.outstandingByType ?? []).find(
+        (result) => result._id === OrderType.ALTERATION,
+      )?.total ?? 0;
+
     return {
       totalCustomers,
       activeCustomers: customersByActivity.active,
@@ -352,10 +422,16 @@ export class DashboardService {
         threshold: lowStockThreshold,
       },
       ordersToday: orderDashboardResult.ordersToday[0]?.count ?? 0,
+      standardOrdersToday,
+      alterationBillsToday,
       orderValue: orderDashboardResult.orderValue[0]?.total ?? 0,
+      standardOrderValue,
+      alterationBillValue,
       outstanding: {
         total: orderDashboardResult.outstanding[0]?.total ?? 0,
         orderCount: orderDashboardResult.outstanding[0]?.orderCount ?? 0,
+        standardTotal: standardOutstanding,
+        alterationBillTotal: alterationBillOutstanding,
       },
       recentOrders: orderDashboardResult.recentOrders,
       revenue: {
@@ -374,6 +450,8 @@ export class DashboardService {
         tailoringAmount: orderDashboardResult.salesMix?.[0]?.tailoringAmount ?? 0,
         attachedFabricAmount: orderDashboardResult.salesMix?.[0]?.attachedFabricAmount ?? 0,
         fabricSaleAmount: orderDashboardResult.salesMix?.[0]?.fabricSaleAmount ?? 0,
+        standardOrderValue,
+        alterationBillAmount: alterationBillValue,
         totalOrderValue: orderDashboardResult.orderValue[0]?.total ?? 0,
       },
     };

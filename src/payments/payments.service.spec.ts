@@ -10,6 +10,7 @@ import type { Connection, Model } from 'mongoose';
 
 import type { CustomerDocument } from '../customers/schemas/customer.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
+import { OrderType } from '../orders/enums/order-type.enum';
 import type { OrderDocument } from '../orders/schemas/order.schema';
 import type { CounterDocument } from '../users/schemas/counter.schema';
 import { PaymentMethod } from './enums/payment-method.enum';
@@ -240,6 +241,41 @@ describe('PaymentsService', () => {
     );
   });
 
+  it('accepts payment against an alteration bill and updates only that bill', async () => {
+    const alterationBill = createOrder({
+      orderId: 'ORD-000010',
+      orderType: OrderType.ALTERATION,
+      originalOrderId: 'ORD-000001',
+      sourceAlterationId: 'ALT-000001',
+      totalAmount: 125,
+      paidAmount: 0,
+      balanceAmount: 125,
+    });
+    const updatedAlterationBill = createOrder({
+      ...alterationBill,
+      paidAmount: 125,
+      balanceAmount: 0,
+    });
+    mockSuccessfulDependencies(alterationBill, updatedAlterationBill);
+
+    await service.create({ ...validDto(), orderId: 'ORD-000010', amount: 125 }, 'USR-000001');
+
+    expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'ORD-000010',
+        paidAmount: 0,
+        balanceAmount: 125,
+      }),
+      { $set: { paidAmount: 125, balanceAmount: 0, updatedBy: 'USR-000001' } },
+      { new: true, session },
+    );
+    expect(orderModel.findOneAndUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'ORD-000001' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('supports a full payment for a fabric-only order total', async () => {
     const fabricOnlyOrder = createOrder({
       orderId: 'ORD-000008',
@@ -257,10 +293,7 @@ describe('PaymentsService', () => {
       }),
     );
 
-    await service.create(
-      { ...validDto(), orderId: 'ORD-000008', amount: 251 },
-      'USR-000001',
-    );
+    await service.create({ ...validDto(), orderId: 'ORD-000008', amount: 251 }, 'USR-000001');
 
     expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -280,10 +313,7 @@ describe('PaymentsService', () => {
       createMixedOrder({ paidAmount: 900, balanceAmount: 1007.88 }),
     );
 
-    await service.create(
-      { ...validDto(), orderId: 'ORD-000009', amount: 900 },
-      'USR-000001',
-    );
+    await service.create({ ...validDto(), orderId: 'ORD-000009', amount: 900 }, 'USR-000001');
 
     expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -339,10 +369,7 @@ describe('PaymentsService', () => {
     customerModel.exists.mockReturnValue(sessionQuery({ _id: 'customer-id' }));
 
     await expect(
-      service.create(
-        { ...validDto(), orderId: 'ORD-000009', amount: 1907.89 },
-        'USR-000001',
-      ),
+      service.create({ ...validDto(), orderId: 'ORD-000009', amount: 1907.89 }, 'USR-000001'),
     ).rejects.toThrow(new BadRequestException('Payment amount exceeds the outstanding balance'));
     expect(paymentModel).not.toHaveBeenCalled();
     expect(session.abortTransaction).toHaveBeenCalled();
@@ -632,6 +659,55 @@ describe('PaymentsService', () => {
     expect(session.commitTransaction).toHaveBeenCalledTimes(1);
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('refunds an alteration-bill payment without changing the original garment order', async () => {
+    const alterationBill = createOrder({
+      orderId: 'ORD-000010',
+      orderType: OrderType.ALTERATION,
+      originalOrderId: 'ORD-000001',
+      sourceAlterationId: 'ALT-000001',
+      totalAmount: 125,
+      paidAmount: 125,
+      balanceAmount: 0,
+    });
+    const alterationPayment = createPaymentDocument({ orderId: 'ORD-000010', amount: 125 }).payment;
+    const refundedPayment = createPaymentDocument({
+      orderId: 'ORD-000010',
+      amount: 125,
+      status: PaymentStatus.REFUNDED,
+      refundedAt: new Date('2026-10-01T10:30:00.000Z'),
+      updatedBy: 'USR-000010',
+    }).payment;
+    const restoredAlterationBill = createOrder({
+      ...alterationBill,
+      paidAmount: 0,
+      balanceAmount: 125,
+    });
+    mockRefundDependencies(
+      alterationPayment,
+      alterationBill,
+      refundedPayment,
+      restoredAlterationBill,
+    );
+
+    await expect(service.refund('PAY-000007', 'USR-000010')).resolves.toBe(refundedPayment);
+
+    expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        orderId: 'ORD-000010',
+        customerId: 'CUS-000001',
+        paidAmount: 125,
+        balanceAmount: 0,
+      },
+      { $set: { paidAmount: 0, balanceAmount: 125, updatedBy: 'USR-000010' } },
+      { new: true, session },
+    );
+    expect(orderModel.findOneAndUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'ORD-000001' }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('rejects a refund when the payment does not exist', async () => {
