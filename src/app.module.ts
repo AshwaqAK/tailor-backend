@@ -20,12 +20,15 @@ import { PaymentsModule } from './payments/payments.module';
 import { GarmentTypesModule } from './garment-types/garment-types.module';
 import { AlterationsModule } from './alterations/alterations.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { validateEnvironment } from './config/env.validation';
+import { globalThrottlerGuardProvider } from './config/throttling';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfig, databaseConfig, authConfig],
+      validate: validateEnvironment,
     }),
 
     MongooseModule.forRootAsync({
@@ -56,5 +59,6 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     AlterationsModule,
     AuditLogsModule,
   ],
+  providers: [globalThrottlerGuardProvider],
 })
 export class AppModule {}

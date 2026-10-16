@@ -518,6 +518,13 @@ PORT=3000
 CORS_ORIGIN=http://localhost:5173
 
 MONGODB_URI=mongodb://localhost:27017/tailor
+JWT_ACCESS_SECRET=local-only-replace-with-a-long-random-value
+JWT_REFRESH_SECRET=local-only-replace-with-a-different-long-random-value
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+AUTH_COOKIE_NAME=refreshToken
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAME_SITE=lax
 ```
 
 Use `.env.example` as the template for required environment variables.
@@ -590,7 +597,18 @@ NODE_ENV=development
 PORT=3000
 CORS_ORIGIN=http://localhost:5173
 MONGODB_URI=mongodb://localhost:27017/tailor
+JWT_ACCESS_SECRET=local-only-replace-with-a-long-random-value
+JWT_REFRESH_SECRET=local-only-replace-with-a-different-long-random-value
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+AUTH_COOKIE_NAME=refreshToken
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAME_SITE=lax
 ```
+
+The application validates its startup environment before accepting requests. `MONGODB_URI`, both JWT secrets, JWT expiry values, and `CORS_ORIGIN` are required. Production and staging require strong JWT secrets and secure cookie settings. Use `.env.example` as a placeholder template and never commit real credentials.
+
+For staging, inject environment variables at runtime through AWS Systems Manager Parameter Store, Secrets Manager, or the EC2 service configuration. Use a dedicated staging MongoDB database and database credentials; never point staging at production or shared development data.
 
 ---
 
@@ -627,6 +645,15 @@ Then start:
 ```bash
 npm run start:prod
 ```
+
+Validate a running deployment with:
+
+```bash
+curl -fsS "$STAGING_API/api/v1/health/live"
+curl -fsS "$STAGING_API/api/v1/health/ready"
+```
+
+`/health/live` verifies that the process is running. `/health/ready` verifies MongoDB connectivity. Health endpoints are excluded from the application throttling limit; other API routes use the configured limit of 100 requests per 60 seconds per client.
 
 ---
 
