@@ -67,9 +67,7 @@ export class GarmentTypePricingService {
     const calculatedPerGarmentTailoringAmount = this.roundCurrency(
       baseTailoringPrice + calculatedCustomizationCharge,
     );
-    const finalTailoringTotal = this.roundCurrency(
-      calculatedPerGarmentTailoringAmount * quantity,
-    );
+    const finalTailoringTotal = this.roundCurrency(calculatedPerGarmentTailoringAmount * quantity);
 
     if (!Number.isFinite(finalTailoringTotal) || finalTailoringTotal < 0) {
       throw new BadRequestException('Garment type tailoring total must be non-negative');
@@ -177,7 +175,9 @@ export class GarmentTypePricingService {
     return {
       groupName: group.name,
       options,
-      calculatedCharge: this.roundCurrency(options.reduce((total, option) => total + option.calculatedCharge, 0)),
+      calculatedCharge: this.roundCurrency(
+        options.reduce((total, option) => total + option.calculatedCharge, 0),
+      ),
     };
   }
 
@@ -225,7 +225,9 @@ export class GarmentTypePricingService {
 
   private calculateOptionCharge(option: CustomizationOptionConfiguration, units: number): number {
     if (!Number.isFinite(option.price) || option.price < 0) {
-      throw new BadRequestException(`Invalid configured price for customization option: ${option.name}`);
+      throw new BadRequestException(
+        `Invalid configured price for customization option: ${option.name}`,
+      );
     }
 
     if (option.pricingType === PricingType.FIXED) {
@@ -236,7 +238,9 @@ export class GarmentTypePricingService {
       return option.price * units;
     }
 
-    throw new BadRequestException(`Unsupported pricing type for customization option: ${option.name}`);
+    throw new BadRequestException(
+      `Unsupported pricing type for customization option: ${option.name}`,
+    );
   }
 
   private optionPricing(

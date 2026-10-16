@@ -245,10 +245,7 @@ export class OrdersService {
             throw new InternalServerErrorException('Unable to calculate fabric sale cost');
           }
 
-          const lineTotal = this.calculateFabricLineAmount(
-            fabric.pricePerUnit,
-            itemDto.quantity,
-          );
+          const lineTotal = this.calculateFabricLineAmount(fabric.pricePerUnit, itemDto.quantity);
           const fabricSaleItem = new this.orderItemModel({
             orderId,
             itemType: OrderItemType.FABRIC_SALE,
@@ -584,11 +581,7 @@ export class OrdersService {
   }
 
   private validateFabricSaleQuantity(quantity: number): void {
-    if (
-      !Number.isFinite(quantity) ||
-      quantity <= 0 ||
-      Number(quantity.toFixed(3)) !== quantity
-    ) {
+    if (!Number.isFinite(quantity) || quantity <= 0 || Number(quantity.toFixed(3)) !== quantity) {
       throw new BadRequestException(
         'Fabric sale quantity must be positive with at most 3 decimal places',
       );
@@ -599,7 +592,9 @@ export class OrdersService {
     this.validateFabricSaleQuantity(quantity);
 
     if (unit === QuantityUnit.PIECE && !Number.isInteger(quantity)) {
-      throw new BadRequestException('Fabric sale quantity must be a whole number for PIECE fabrics');
+      throw new BadRequestException(
+        'Fabric sale quantity must be a whole number for PIECE fabrics',
+      );
     }
   }
 

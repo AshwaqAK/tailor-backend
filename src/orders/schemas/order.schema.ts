@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
 import { OrderStatus } from '../enums/order-status.enum';
+import { OrderType } from '../enums/order-type.enum';
 
 export type OrderDocument = HydratedDocument<Order> & {
   createdAt: Date;
@@ -49,6 +50,39 @@ export class Order {
     index: true,
   })
   status!: OrderStatus;
+
+  @Prop({
+    type: String,
+    enum: OrderType,
+    required: true,
+    default: OrderType.STANDARD,
+    index: true,
+  })
+  orderType!: OrderType;
+
+  @Prop({
+    type: String,
+    ref: 'Alteration',
+    trim: true,
+    match: /^ALT-\d{6}$/,
+    required: function (this: Order): boolean {
+      return this.orderType === OrderType.ALTERATION;
+    },
+    immutable: true,
+  })
+  sourceAlterationId?: string;
+
+  @Prop({
+    type: String,
+    ref: 'Order',
+    trim: true,
+    match: /^ORD-\d{6}$/,
+    required: function (this: Order): boolean {
+      return this.orderType === OrderType.ALTERATION;
+    },
+    immutable: true,
+  })
+  originalOrderId?: string;
 
   @Prop({
     type: Number,
@@ -119,3 +153,14 @@ export class Order {
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
 OrderSchema.index({ createdAt: 1, status: 1 });
+OrderSchema.index(
+  { sourceAlterationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      orderType: OrderType.ALTERATION,
+      sourceAlterationId: { $type: 'string' },
+    },
+    name: 'unique_alteration_billing_order',
+  },
+);

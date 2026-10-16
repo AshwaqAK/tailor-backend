@@ -45,7 +45,10 @@ async function seedMeasurementFields() {
     const garmentTypeModel =
       (mongoose.models.GarmentType as Model<GarmentTypeRecord> | undefined) ??
       mongoose.model<GarmentTypeRecord>('GarmentType', garmentTypeModelSchema);
-    const garmentTypes = await garmentTypeModel.find({}).select({ code: 1, measurementFields: 1 }).exec();
+    const garmentTypes = await garmentTypeModel
+      .find({})
+      .select({ code: 1, measurementFields: 1 })
+      .exec();
 
     let updated = 0;
 

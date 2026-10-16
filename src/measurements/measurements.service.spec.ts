@@ -184,8 +184,8 @@ describe('MeasurementsService', () => {
     });
     const { measurement } = createMeasurementDocument();
     let capturedData: Record<string, unknown> | undefined;
-    measurementModel.mockImplementation((data: Record<string, unknown>) =>
-      ((capturedData = data), Object.assign(measurement, data)),
+    measurementModel.mockImplementation(
+      (data: Record<string, unknown>) => ((capturedData = data), Object.assign(measurement, data)),
     );
 
     await service.createMeasurement(
@@ -265,19 +265,17 @@ describe('MeasurementsService', () => {
         ],
       }),
     }));
-    measurementModel.findOne.mockImplementation(
-      ({ garmentTypeId }: { garmentTypeId: string }) => ({
-        sort: () => ({
-          select: () => ({
-            lean: () => ({
-              exec: jest.fn().mockResolvedValue(
-                garmentTypeId === 'GRT-000001' ? { version: 2 } : null,
-              ),
-            }),
+    measurementModel.findOne.mockImplementation(({ garmentTypeId }: { garmentTypeId: string }) => ({
+      sort: () => ({
+        select: () => ({
+          lean: () => ({
+            exec: jest
+              .fn()
+              .mockResolvedValue(garmentTypeId === 'GRT-000001' ? { version: 2 } : null),
           }),
         }),
       }),
-    );
+    }));
     const documents: Record<string, unknown>[] = [];
     measurementModel.mockImplementation((data: Record<string, unknown>) => {
       documents.push(data);
@@ -321,8 +319,8 @@ describe('MeasurementsService', () => {
     await expect(
       service.createMeasurement(
         {
-        customerId: 'CUS-000001',
-        clothingType: ClothingType.SHIRT,
+          customerId: 'CUS-000001',
+          clothingType: ClothingType.SHIRT,
           garmentTypeId: 'GRT-999999',
           measurements: { chest: 40 },
           measuredAt,
@@ -422,9 +420,9 @@ describe('MeasurementsService', () => {
     await expect(
       service.createMeasurement(
         {
-        customerId: 'CUS-999999',
-        clothingType: ClothingType.SHIRT,
-        garmentTypeId: 'GRT-000001',
+          customerId: 'CUS-999999',
+          clothingType: ClothingType.SHIRT,
+          garmentTypeId: 'GRT-000001',
           measurements: { chest: 40 },
           measuredAt,
         },

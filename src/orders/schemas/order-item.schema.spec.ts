@@ -12,7 +12,13 @@ jest.mock('@nestjs/mongoose', () => {
       return [toSchemaType(type[0])];
     }
 
-    if (typeof type === 'function' && type !== String && type !== Number && type !== Boolean && type !== Date) {
+    if (
+      typeof type === 'function' &&
+      type !== String &&
+      type !== Number &&
+      type !== Boolean &&
+      type !== Date
+    ) {
       return createSchema(type);
     }
 
@@ -34,18 +40,22 @@ jest.mock('@nestjs/mongoose', () => {
   return {
     InjectConnection: () => () => undefined,
     InjectModel: () => () => undefined,
-    Prop: (options: Record<string, unknown> = {}) => (target: object, property: string) => {
-      const targetDefinitions = propertyDefinitions.get(target.constructor) ?? {};
-      const reflectedType = Reflect.getMetadata('design:type', target, property);
-      targetDefinitions[property] = {
-        ...(options.type === undefined && reflectedType ? { type: reflectedType } : {}),
-        ...options,
-      };
-      propertyDefinitions.set(target.constructor, targetDefinitions);
-    },
-    Schema: (options: Record<string, unknown> = {}) => (target: Function) => {
-      schemaOptions.set(target, options);
-    },
+    Prop:
+      (options: Record<string, unknown> = {}) =>
+      (target: object, property: string) => {
+        const targetDefinitions = propertyDefinitions.get(target.constructor) ?? {};
+        const reflectedType = Reflect.getMetadata('design:type', target, property);
+        targetDefinitions[property] = {
+          ...(options.type === undefined && reflectedType ? { type: reflectedType } : {}),
+          ...options,
+        };
+        propertyDefinitions.set(target.constructor, targetDefinitions);
+      },
+    Schema:
+      (options: Record<string, unknown> = {}) =>
+      (target: Function) => {
+        schemaOptions.set(target, options);
+      },
     SchemaFactory: {
       createForClass: createSchema,
     },
@@ -57,12 +67,7 @@ import mongoose, { Model } from 'mongoose';
 import { FabricType } from '../../fabrics/enums/fabric-type.enum';
 import { QuantityUnit } from '../../fabrics/enums/quantity-unit.enum';
 import { PricingType } from '../../garment-types/enums/pricing-type.enum';
-import {
-  FabricSaleSnapshot,
-  OrderItem,
-  OrderItemSchema,
-  OrderItemType,
-} from './order-item.schema';
+import { FabricSaleSnapshot, OrderItem, OrderItemSchema, OrderItemType } from './order-item.schema';
 
 describe('OrderItem schema', () => {
   let orderItemModel: Model<OrderItem>;

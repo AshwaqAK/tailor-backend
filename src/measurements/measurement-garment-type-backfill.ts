@@ -40,7 +40,8 @@ async function backfill() {
   await mongoose.connect(databaseUri);
 
   try {
-    const garmentTypeModel = (mongoose.models.GarmentType as Model<GarmentTypeRecord> | undefined) ??
+    const garmentTypeModel =
+      (mongoose.models.GarmentType as Model<GarmentTypeRecord> | undefined) ??
       mongoose.model<GarmentTypeRecord>('GarmentType', garmentTypeModelSchema);
     const measurementModel =
       (mongoose.models.Measurement as Model<MeasurementRecord> | undefined) ??
@@ -51,7 +52,9 @@ async function backfill() {
       .select({ code: 1, garmentTypeId: 1 })
       .lean()
       .exec();
-    const garmentTypesByCode = new Map(garmentTypes.map((garmentType) => [garmentType.code, garmentType]));
+    const garmentTypesByCode = new Map(
+      garmentTypes.map((garmentType) => [garmentType.code, garmentType]),
+    );
     const missingCodes = Object.values(ClothingType).filter(
       (code) => !garmentTypesByCode.has(code),
     );

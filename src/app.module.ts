@@ -18,6 +18,7 @@ import { FabricsModule } from './fabrics/fabrics.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PaymentsModule } from './payments/payments.module';
 import { GarmentTypesModule } from './garment-types/garment-types.module';
+import { AlterationsModule } from './alterations/alterations.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { GarmentTypesModule } from './garment-types/garment-types.module';
     DashboardModule,
     PaymentsModule,
     GarmentTypesModule,
+    AlterationsModule,
   ],
 })
 export class AppModule {}

@@ -12,6 +12,7 @@ import type { CustomerDocument } from '../customers/schemas/customer.schema';
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
+import { OrderType } from '../orders/enums/order-type.enum';
 import type { OrderDocument } from '../orders/schemas/order.schema';
 import { PaymentMethod } from '../payments/enums/payment-method.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -96,6 +97,14 @@ describe('ReportsService', () => {
       orderValue: 0,
       currentPaidAmount: 0,
       currentOutstandingBalance: 0,
+      standardOrderCount: 0,
+      alterationBillCount: 0,
+      standardOrderValue: 0,
+      alterationBillValue: 0,
+      standardPaidAmount: 0,
+      alterationBillPaidAmount: 0,
+      standardOutstandingBalance: 0,
+      alterationBillOutstandingBalance: 0,
       customerBreakdown: {
         data: [],
         meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
@@ -118,6 +127,14 @@ describe('ReportsService', () => {
               orderValue: 350,
               currentPaidAmount: 200,
               currentOutstandingBalance: 150,
+              standardOrderCount: 1,
+              alterationBillCount: 1,
+              standardOrderValue: 300,
+              alterationBillValue: 50,
+              standardPaidAmount: 180,
+              alterationBillPaidAmount: 20,
+              standardOutstandingBalance: 120,
+              alterationBillOutstandingBalance: 30,
             },
           ],
           customerBreakdown: [
@@ -130,6 +147,14 @@ describe('ReportsService', () => {
                   orderValue: 350,
                   currentPaidAmount: 200,
                   currentOutstandingBalance: 150,
+                  standardOrderCount: 1,
+                  alterationBillCount: 1,
+                  standardOrderValue: 300,
+                  alterationBillValue: 50,
+                  standardPaidAmount: 180,
+                  alterationBillPaidAmount: 20,
+                  standardOutstandingBalance: 120,
+                  alterationBillOutstandingBalance: 30,
                   latestOrderCreatedAt: new Date('2026-01-03T00:00:00.000Z'),
                 },
               ],
@@ -156,6 +181,14 @@ describe('ReportsService', () => {
       orderValue: 350,
       currentPaidAmount: 200,
       currentOutstandingBalance: 150,
+      standardOrderCount: 1,
+      alterationBillCount: 1,
+      standardOrderValue: 300,
+      alterationBillValue: 50,
+      standardPaidAmount: 180,
+      alterationBillPaidAmount: 20,
+      standardOutstandingBalance: 120,
+      alterationBillOutstandingBalance: 30,
       customerBreakdown: {
         data: [{ customerId: 'CUS-000001', customerName: 'Asha', orderValue: 350 }],
         meta: { page: 2, limit: 1, total: 1, totalPages: 1 },
@@ -261,6 +294,20 @@ describe('ReportsService', () => {
       orderValue: 24000,
       paidAmount: 15000,
       outstandingBalance: 9000,
+      classification: {
+        [OrderType.STANDARD]: {
+          orderCount: 0,
+          orderValue: 0,
+          paidAmount: 0,
+          outstandingBalance: 0,
+        },
+        [OrderType.ALTERATION]: {
+          orderCount: 0,
+          orderValue: 0,
+          paidAmount: 0,
+          outstandingBalance: 0,
+        },
+      },
       composition: {
         tailoringOnly: 8,
         fabricSaleOnly: 5,
@@ -271,6 +318,73 @@ describe('ReportsService', () => {
           fabricSaleAmount: 5500,
         },
       },
+    });
+  });
+
+  it('separates alteration bills from standard orders and excludes them from sales composition', async () => {
+    orderModel.aggregate.mockReturnValue(
+      aggregation([
+        {
+          statusCounts: [{ _id: OrderStatus.CONFIRMED, count: 2 }],
+          financial: [{ orderCount: 2, orderValue: 600, paidAmount: 300, outstandingBalance: 300 }],
+          classificationFinancial: [
+            {
+              _id: OrderType.STANDARD,
+              orderCount: 1,
+              orderValue: 500,
+              paidAmount: 250,
+              outstandingBalance: 250,
+            },
+            {
+              _id: OrderType.ALTERATION,
+              orderCount: 1,
+              orderValue: 100,
+              paidAmount: 50,
+              outstandingBalance: 50,
+            },
+          ],
+          composition: [
+            {
+              _id: 'TAILORING_ONLY',
+              orderCount: 1,
+              tailoringAmount: 500,
+              attachedFabricAmount: 0,
+              fabricSaleAmount: 0,
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await service.getOrderReport(new OrderReportQueryDto());
+
+    expect(result.classification).toEqual({
+      [OrderType.STANDARD]: {
+        orderCount: 1,
+        orderValue: 500,
+        paidAmount: 250,
+        outstandingBalance: 250,
+      },
+      [OrderType.ALTERATION]: {
+        orderCount: 1,
+        orderValue: 100,
+        paidAmount: 50,
+        outstandingBalance: 50,
+      },
+    });
+    expect(result.orderValue).toBe(
+      result.classification[OrderType.STANDARD].orderValue +
+        result.classification[OrderType.ALTERATION].orderValue,
+    );
+    expect(result.composition.fabricSaleOnly).toBe(0);
+
+    const pipeline = orderModel.aggregate.mock.calls[0][0] as Array<Record<string, unknown>>;
+    const facet = pipeline[0].$facet as Record<string, Array<Record<string, unknown>>>;
+    expect(
+      facet.classificationFinancial.some((stage) => JSON.stringify(stage).includes('$ifNull')),
+    ).toBe(true);
+    expect(facet.composition).toContainEqual({
+      $match: { orderType: { $ne: OrderType.ALTERATION } },
     });
   });
 
@@ -334,9 +448,7 @@ describe('ReportsService', () => {
   });
 
   it('filters fabric sales by parent order date and snapshot fabric id', async () => {
-    orderModel.aggregate.mockReturnValue(
-      aggregation([{ summary: [], fabricBreakdown: [] }]),
-    );
+    orderModel.aggregate.mockReturnValue(aggregation([{ summary: [], fabricBreakdown: [] }]));
     const query = Object.assign(new FabricSalesReportQueryDto(), {
       fromDate: '2026-01-01',
       toDate: '2026-01-31',
@@ -369,9 +481,7 @@ describe('ReportsService', () => {
   });
 
   it('initializes empty fabric sales results and excludes legacy/non-sale lines in the pipeline', async () => {
-    orderModel.aggregate.mockReturnValue(
-      aggregation([{ summary: [], fabricBreakdown: [] }]),
-    );
+    orderModel.aggregate.mockReturnValue(aggregation([{ summary: [], fabricBreakdown: [] }]));
 
     const result = await service.getFabricSalesReport(new FabricSalesReportQueryDto());
 
@@ -390,7 +500,9 @@ describe('ReportsService', () => {
   });
 
   it('applies date and customer filters to status, financial, and item composition facets', async () => {
-    orderModel.aggregate.mockReturnValue(aggregation([{ statusCounts: [], financial: [], composition: [] }]));
+    orderModel.aggregate.mockReturnValue(
+      aggregation([{ statusCounts: [], financial: [], composition: [] }]),
+    );
     const query = Object.assign(new OrderReportQueryDto(), {
       fromDate: '2026-01-01',
       toDate: '2026-01-31',
@@ -438,6 +550,20 @@ describe('ReportsService', () => {
       orderValue: 0,
       paidAmount: 0,
       outstandingBalance: 0,
+      classification: {
+        [OrderType.STANDARD]: {
+          orderCount: 0,
+          orderValue: 0,
+          paidAmount: 0,
+          outstandingBalance: 0,
+        },
+        [OrderType.ALTERATION]: {
+          orderCount: 0,
+          orderValue: 0,
+          paidAmount: 0,
+          outstandingBalance: 0,
+        },
+      },
       composition: {
         tailoringOnly: 0,
         fabricSaleOnly: 0,
@@ -452,7 +578,9 @@ describe('ReportsService', () => {
       aggregation([
         {
           statusCounts: [{ _id: OrderStatus.CONFIRMED, count: 2 }],
-          financial: [{ orderCount: 2, orderValue: 1800, paidAmount: 800, outstandingBalance: 1000 }],
+          financial: [
+            { orderCount: 2, orderValue: 1800, paidAmount: 800, outstandingBalance: 1000 },
+          ],
           composition: [
             {
               _id: 'TAILORING_ONLY',
@@ -476,7 +604,10 @@ describe('ReportsService', () => {
     const result = await service.getOrderReport(new OrderReportQueryDto());
     const pipeline = orderModel.aggregate.mock.calls[0][0] as Array<Record<string, unknown>>;
     const facet = pipeline[0].$facet as Record<string, Array<Record<string, unknown>>>;
-    const groupStage = facet.composition.find((stage) => '$group' in stage) as Record<string, unknown>;
+    const groupStage = facet.composition.find((stage) => '$group' in stage) as Record<
+      string,
+      unknown
+    >;
 
     expect(result.composition).toEqual({
       tailoringOnly: 1,
@@ -503,6 +634,11 @@ describe('ReportsService', () => {
             { _id: PaymentMethod.CASH, count: 1 },
             { _id: PaymentMethod.UPI, count: 2 },
           ],
+          byOrderTypeCollections: [
+            { _id: OrderType.STANDARD, total: 1200 },
+            { _id: OrderType.ALTERATION, total: 300 },
+          ],
+          byOrderTypeRefunds: [{ _id: OrderType.ALTERATION, total: 300 }],
         },
       ]),
     );
@@ -516,6 +652,10 @@ describe('ReportsService', () => {
       paymentCounts: {
         byStatus: { PENDING: 0, SUCCESS: 2, FAILED: 0, REFUNDED: 1 },
         byMethod: { CASH: 1, UPI: 2, CARD: 0, BANK_TRANSFER: 0, OTHER: 0 },
+      },
+      byOrderType: {
+        [OrderType.STANDARD]: { grossCollections: 1200, refunds: 0 },
+        [OrderType.ALTERATION]: { grossCollections: 300, refunds: 300 },
       },
     });
   });
@@ -553,7 +693,10 @@ describe('ReportsService', () => {
     };
 
     expect(facet.grossCollections[0]).toEqual({
-      $match: { ...expectedPaidAt, status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] } },
+      $match: {
+        ...expectedPaidAt,
+        status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] },
+      },
     });
     expect(facet.refunds[0]).toEqual({
       $match: { ...expectedRefundedAt, status: PaymentStatus.REFUNDED },
@@ -581,7 +724,10 @@ describe('ReportsService', () => {
     };
 
     expect(facet.grossCollections[0]).toEqual({
-      $match: { paidAt: expectedRange, status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] } },
+      $match: {
+        paidAt: expectedRange,
+        status: { $in: [PaymentStatus.SUCCESS, PaymentStatus.REFUNDED] },
+      },
     });
     expect(facet.refunds[0]).toEqual({
       $match: { refundedAt: expectedRange, status: PaymentStatus.REFUNDED },
@@ -632,6 +778,10 @@ describe('ReportsService', () => {
       paymentCounts: {
         byStatus: { PENDING: 0, SUCCESS: 0, FAILED: 0, REFUNDED: 0 },
         byMethod: { CASH: 0, UPI: 0, CARD: 0, BANK_TRANSFER: 0, OTHER: 0 },
+      },
+      byOrderType: {
+        [OrderType.STANDARD]: { grossCollections: 0, refunds: 0 },
+        [OrderType.ALTERATION]: { grossCollections: 0, refunds: 0 },
       },
     });
     expect(orderModel.aggregate).not.toHaveBeenCalled();
@@ -769,9 +919,7 @@ describe('ReportsService', () => {
     orderModel.aggregate.mockReturnValue(
       aggregation([
         {
-          summary: [
-            { serviceLineCount: 3, distinctServiceCount: 2, serviceAmount: 180 },
-          ],
+          summary: [{ serviceLineCount: 3, distinctServiceCount: 2, serviceAmount: 180 }],
           serviceBreakdown: [
             {
               data: [
@@ -830,9 +978,7 @@ describe('ReportsService', () => {
   });
 
   it('filters service usage by order date and saved service id, excluding fabric sales and missing snapshots', async () => {
-    orderModel.aggregate.mockReturnValue(
-      aggregation([{ summary: [], serviceBreakdown: [] }]),
-    );
+    orderModel.aggregate.mockReturnValue(aggregation([{ summary: [], serviceBreakdown: [] }]));
     const query = Object.assign(new ServiceUsageReportQueryDto(), {
       fromDate: '2026-02-01',
       toDate: '2026-02-28',

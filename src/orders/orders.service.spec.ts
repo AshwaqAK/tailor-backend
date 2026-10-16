@@ -93,7 +93,7 @@ describe('OrdersService', () => {
     return { item, save };
   };
 
-    const measurement = {
+  const measurement = {
     _id: measurementId,
     customerId: 'CUS-000001',
     clothingType: ClothingType.SHIRT,
@@ -259,15 +259,17 @@ describe('OrdersService', () => {
         quantity: 1,
         customizations: { Collar: 'Mandarin' },
       }),
-    ).rejects.toThrow(new BadRequestException('Unknown customization option: Mandarin in group Collar'));
+    ).rejects.toThrow(
+      new BadRequestException('Unknown customization option: Mandarin in group Collar'),
+    );
   });
 
   it.each([0, -1, 1.5])('rejects invalid preview quantity %s', async (quantity) => {
     mockPreviewGarmentType();
 
-    await expect(
-      service.previewPricing({ garmentTypeId: 'GRT-000001', quantity }),
-    ).rejects.toThrow(new BadRequestException('Garment quantity must be a positive integer'));
+    await expect(service.previewPricing({ garmentTypeId: 'GRT-000001', quantity })).rejects.toThrow(
+      new BadRequestException('Garment quantity must be a positive integer'),
+    );
   });
 
   it('does not create or modify order records', async () => {
@@ -630,22 +632,22 @@ describe('OrdersService', () => {
       return Object.assign(item, data);
     });
 
-  const result = await service.createOrder(
-    {
-      customerId: 'CUS-000001',
-      orderDate,
-      items: [
-        {
-          itemType: OrderItemType.FABRIC_SALE,
-          fabricId: 'FAB-000001',
-          quantity: 3,
-        },
-      ],
-    } as never,
-    'USR-000009',
-  );
-  expect(result.order).toBe(order);
-  expect(result.items).toHaveLength(1);
+    const result = await service.createOrder(
+      {
+        customerId: 'CUS-000001',
+        orderDate,
+        items: [
+          {
+            itemType: OrderItemType.FABRIC_SALE,
+            fabricId: 'FAB-000001',
+            quantity: 3,
+          },
+        ],
+      } as never,
+      'USR-000009',
+    );
+    expect(result.order).toBe(order);
+    expect(result.items).toHaveLength(1);
     expect(fabricsService.deductStock).toHaveBeenCalledWith(
       'FAB-000001',
       3,
@@ -745,8 +747,12 @@ describe('OrdersService', () => {
     expect(garmentTypePricingService.calculateTailoringPricing).toHaveBeenCalledTimes(1);
     expect(measurementModel.findById).toHaveBeenCalledTimes(1);
     expect(capturedItems).toHaveLength(2);
-    expect(capturedItems[0]).toEqual(expect.objectContaining({ itemType: OrderItemType.TAILORING }));
-    expect(capturedItems[1]).toEqual(expect.objectContaining({ itemType: OrderItemType.FABRIC_SALE }));
+    expect(capturedItems[0]).toEqual(
+      expect.objectContaining({ itemType: OrderItemType.TAILORING }),
+    );
+    expect(capturedItems[1]).toEqual(
+      expect.objectContaining({ itemType: OrderItemType.FABRIC_SALE }),
+    );
     expect(result.order.totalAmount).toBe(1907.88);
     expect(result.order.balanceAmount).toBe(1907.88);
   });
@@ -790,9 +796,7 @@ describe('OrdersService', () => {
     });
     fabricsService.deductStock.mockImplementation((fabricId: string) => {
       if (fabricId === 'FAB-000002') {
-        return Promise.reject(
-          new BadRequestException('Insufficient stock for fabric FAB-000002'),
-        );
+        return Promise.reject(new BadRequestException('Insufficient stock for fabric FAB-000002'));
       }
 
       return Promise.resolve({

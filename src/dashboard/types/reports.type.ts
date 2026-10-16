@@ -2,6 +2,7 @@ import { AppointmentStatus } from '../../appointments/enums/appointment-status.e
 import { AppointmentType } from '../../appointments/enums/appointment-type.enum';
 import { QuantityUnit } from '../../fabrics/enums/quantity-unit.enum';
 import { OrderStatus } from '../../orders/enums/order-status.enum';
+import { OrderType } from '../../orders/enums/order-type.enum';
 import { PaymentMethod } from '../../payments/enums/payment-method.enum';
 import { PaymentStatus } from '../../payments/enums/payment-status.enum';
 import { ServiceCategory } from '../../services/enums/service-category.enum';
@@ -16,6 +17,14 @@ export interface CustomerReport {
   orderValue: number;
   currentPaidAmount: number;
   currentOutstandingBalance: number;
+  standardOrderCount: number;
+  alterationBillCount: number;
+  standardOrderValue: number;
+  alterationBillValue: number;
+  standardPaidAmount: number;
+  alterationBillPaidAmount: number;
+  standardOutstandingBalance: number;
+  alterationBillOutstandingBalance: number;
   customerBreakdown: {
     data: Array<{
       customerId: string;
@@ -24,6 +33,14 @@ export interface CustomerReport {
       orderValue: number;
       currentPaidAmount: number;
       currentOutstandingBalance: number;
+      standardOrderCount: number;
+      alterationBillCount: number;
+      standardOrderValue: number;
+      alterationBillValue: number;
+      standardPaidAmount: number;
+      alterationBillPaidAmount: number;
+      standardOutstandingBalance: number;
+      alterationBillOutstandingBalance: number;
       latestOrderCreatedAt: Date;
     }>;
     meta: {
@@ -48,6 +65,15 @@ export interface OrderReport {
   orderValue: number;
   paidAmount: number;
   outstandingBalance: number;
+  classification: Record<
+    OrderType,
+    {
+      orderCount: number;
+      orderValue: number;
+      paidAmount: number;
+      outstandingBalance: number;
+    }
+  >;
   composition: {
     tailoringOnly: number;
     fabricSaleOnly: number;
@@ -68,6 +94,7 @@ export interface PaymentReport {
     byStatus: Record<PaymentStatus, number>;
     byMethod: Record<PaymentMethod, number>;
   };
+  byOrderType: Record<OrderType, { grossCollections: number; refunds: number }>;
 }
 
 export interface AppointmentReport {
