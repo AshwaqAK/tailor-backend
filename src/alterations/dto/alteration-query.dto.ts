@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
 import { AlterationStatus } from '../enums/alteration-status.enum';
 
@@ -8,7 +8,7 @@ export class AlterationQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -16,6 +16,11 @@ export class AlterationQueryDto {
   @Min(1)
   @Max(100)
   limit = 20;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 
   @IsOptional()
   @Matches(/^CUS-\d{6}$/, {

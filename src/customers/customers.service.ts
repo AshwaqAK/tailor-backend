@@ -11,6 +11,13 @@ import { Counter, CounterDocument } from '../users/schemas/counter.schema';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import {
+  CursorPageMeta,
+  cursorPredicate,
+  decodeCursor,
+  encodeCursor,
+  withCursorFilter,
+} from '../common/pagination/cursor';
 
 @Injectable()
 export class CustomersService {
@@ -130,14 +137,17 @@ export class CustomersService {
   async searchCustomers(query: CustomerQueryDto): Promise<{
     data: CustomerResponse[];
     meta: {
-      page: number;
+      page?: number;
       limit: number;
-      total: number;
-      totalPages: number;
+      total?: number;
+      totalPages?: number;
+      hasNextPage?: boolean;
+      nextCursor?: string | null;
     };
   }> {
     const {
-      page = 1,
+      page,
+      cursor,
       limit = 20,
       search,
       sortBy = 'createdAt',
@@ -166,27 +176,48 @@ export class CustomersService {
       ];
     }
 
-    const skip = (page - 1) * limit;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
-    const [customers, total] = await Promise.all([
-      this.customerModel
-        .find(filter)
-        .sort({ [sortBy]: sortDirection })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.customerModel.countDocuments(filter).exec(),
-    ]);
+    if (page !== undefined) {
+      const skip = (page - 1) * limit;
+      const [customers, total] = await Promise.all([
+        this.customerModel.find(filter).sort({ [sortBy]: sortDirection }).skip(skip).limit(limit).exec(),
+        this.customerModel.countDocuments(filter).exec(),
+      ]);
+      return {
+        data: customers.map((customer) => this.toCustomerResponse(customer)),
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    }
 
+    const decoded = cursor ? decodeCursor(cursor, sortBy, sortOrder) : undefined;
+    const cursorFilter = decoded
+      ? withCursorFilter(filter, cursorPredicate(sortBy, 'customerId', sortOrder, decoded))
+      : filter;
+
+    const customers = await this.customerModel
+      .find(cursorFilter)
+      .sort({ [sortBy]: sortDirection, customerId: sortDirection })
+      .limit(limit + 1)
+      .exec();
+    const hasNextPage = customers.length > limit;
+    const pageCustomers = hasNextPage ? customers.slice(0, limit) : customers;
+    const last = pageCustomers.at(-1);
     return {
-      data: customers.map((customer) => this.toCustomerResponse(customer)),
+      data: pageCustomers.map((customer) => this.toCustomerResponse(customer)),
       meta: {
-        page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+        hasNextPage,
+        nextCursor:
+          hasNextPage && last
+            ? encodeCursor(
+                sortBy,
+                sortOrder,
+                (last as unknown as Record<string, unknown>)[sortBy] as Date | number | string,
+                last.customerId,
+              )
+            : null,
+      } satisfies CursorPageMeta,
     };
   }
 

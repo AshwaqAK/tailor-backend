@@ -8,6 +8,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -19,7 +20,7 @@ export class AppointmentQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -27,6 +28,11 @@ export class AppointmentQueryDto {
   @Min(1)
   @Max(100)
   limit = 20;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 
   @IsOptional()
   @IsString()

@@ -20,14 +20,17 @@ import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { cursorPredicate, decodeCursor, encodeCursor, withCursorFilter } from '../common/pagination/cursor';
 
 export interface PaginatedPayments {
   data: PaymentDocument[];
   meta: {
-    page: number;
+    page?: number;
     limit: number;
-    total: number;
-    totalPages: number;
+    total?: number;
+    totalPages?: number;
+    hasNextPage?: boolean;
+    nextCursor?: string | null;
   };
 }
 
@@ -198,7 +201,8 @@ export class PaymentsService {
 
   async findAll(query: PaymentQueryDto): Promise<PaginatedPayments> {
     const {
-      page = 1,
+      page,
+      cursor,
       limit = 20,
       orderId,
       customerId,
@@ -249,10 +253,35 @@ export class PaymentsService {
       filter.paidAt = paidAtRange;
     }
 
-    const skip = (page - 1) * limit;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     try {
+      if (page === undefined) {
+        const decoded = cursor ? decodeCursor(cursor, sortBy, sortOrder) : undefined;
+        const cursorFilter = decoded
+          ? withCursorFilter(filter, cursorPredicate(sortBy, 'paymentId', sortOrder, decoded))
+          : filter;
+        const fetched = await this.paymentModel
+          .find(cursorFilter)
+          .sort({ [sortBy]: sortDirection, paymentId: sortDirection })
+          .limit(limit + 1)
+          .exec();
+        const hasNextPage = fetched.length > limit;
+        const data = hasNextPage ? fetched.slice(0, limit) : fetched;
+        const last = data.at(-1);
+        return {
+          data,
+          meta: {
+            limit,
+            hasNextPage,
+            nextCursor: hasNextPage && last
+              ? encodeCursor(sortBy, sortOrder, (last as unknown as Record<string, unknown>)[sortBy] as Date | number | string, last.paymentId)
+              : null,
+          },
+        };
+      }
+
+      const skip = (page - 1) * limit;
       const [payments, total] = await Promise.all([
         this.paymentModel
           .find(filter)

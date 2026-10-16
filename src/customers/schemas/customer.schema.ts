@@ -90,3 +90,4 @@ export class Customer {
 export const CustomerSchema = SchemaFactory.createForClass(Customer);
 
 CustomerSchema.index({ createdAt: 1, isActive: 1 });
+CustomerSchema.index({ createdAt: -1, customerId: -1 });

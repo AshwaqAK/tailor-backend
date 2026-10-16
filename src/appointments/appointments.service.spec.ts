@@ -245,7 +245,7 @@ describe('AppointmentsService', () => {
       exec: jest.fn().mockResolvedValue(1),
     });
 
-    const result = await service.findAll(new AppointmentQueryDto());
+    const result = await service.findAll(Object.assign(new AppointmentQueryDto(), { page: 1 }));
 
     expect(appointmentModel.find).toHaveBeenCalledWith({});
     expect(sort).toHaveBeenCalledWith({ appointmentDate: 1 });

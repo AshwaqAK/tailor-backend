@@ -8,7 +8,7 @@ export class CustomerQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page = 1;
+  page?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -16,6 +16,11 @@ export class CustomerQueryDto {
   @Min(1)
   @Max(100)
   limit = 20;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 
   @IsOptional()
   @IsString()

@@ -158,6 +158,7 @@ export class AuditLog {
 export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
 
 AuditLogSchema.index({ eventAt: -1 });
+AuditLogSchema.index({ eventAt: -1, auditId: -1 });
 AuditLogSchema.index({ actorId: 1, eventAt: -1 });
 AuditLogSchema.index({ entityType: 1, entityId: 1, eventAt: -1 });
 AuditLogSchema.index({ action: 1, eventAt: -1 });
