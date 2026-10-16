@@ -23,6 +23,8 @@ import { OrderStatus } from './enums/order-status.enum';
 import type { OrderDocument } from './schemas/order.schema';
 import type { OrderItemDocument } from './schemas/order-item.schema';
 import { OrdersService } from './orders.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -57,6 +59,7 @@ describe('OrdersService', () => {
   let fabricsService: { deductStock: jest.Mock };
   let servicesService: { findActiveByIds: jest.Mock };
   let garmentTypePricingService: { calculateTailoringPricing: jest.Mock };
+  let auditLogsService: { record: jest.Mock };
   let service: OrdersService;
 
   const createOrderDocument = (overrides: Partial<OrderDocument> = {}) => {
@@ -165,6 +168,7 @@ describe('OrdersService', () => {
         finalTailoringTotal: 1500,
       }),
     };
+    auditLogsService = { record: jest.fn().mockResolvedValue(undefined) };
     service = new OrdersService(
       { startSession: jest.fn().mockResolvedValue(session) } as unknown as Connection,
       orderModel as unknown as Model<OrderDocument>,
@@ -176,6 +180,7 @@ describe('OrdersService', () => {
       fabricsService as unknown as FabricsService,
       servicesService as unknown as ServicesService,
       garmentTypePricingService as unknown as GarmentTypePricingService,
+      auditLogsService as never,
     );
   });
 
@@ -355,6 +360,7 @@ describe('OrdersService', () => {
       'ORD-000007',
       'USR-000009',
       session,
+      ['TAILORING_ATTACHED'],
     );
     expect(orderModel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -439,6 +445,16 @@ describe('OrdersService', () => {
     expect(session.commitTransaction).toHaveBeenCalled();
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.CREATED,
+        entityType: AuditEntityType.ORDER,
+        entityId: 'ORD-000007',
+        metadata: expect.objectContaining({ orderType: 'STANDARD' }),
+      }),
+      session,
+    );
     expect(result).toEqual({ order, items: [item] });
   });
 
@@ -587,6 +603,7 @@ describe('OrdersService', () => {
       'ORD-000009',
       'USR-000009',
       session,
+      ['FABRIC_SALE'],
     );
     expect(capturedItemInput).toEqual(
       expect.objectContaining({
@@ -654,6 +671,7 @@ describe('OrdersService', () => {
       'ORD-000013',
       'USR-000009',
       session,
+      ['FABRIC_SALE'],
     );
     expect(order.totalAmount).toBe(60);
   });
@@ -743,6 +761,7 @@ describe('OrdersService', () => {
       'ORD-000010',
       'USR-000009',
       session,
+      ['TAILORING_ATTACHED', 'FABRIC_SALE'],
     );
     expect(garmentTypePricingService.calculateTailoringPricing).toHaveBeenCalledTimes(1);
     expect(measurementModel.findById).toHaveBeenCalledTimes(1);
@@ -838,6 +857,7 @@ describe('OrdersService', () => {
       'ORD-000012',
       'USR-000009',
       session,
+      ['FABRIC_SALE'],
     );
     expect(fabricsService.deductStock).toHaveBeenNthCalledWith(
       2,
@@ -846,6 +866,7 @@ describe('OrdersService', () => {
       'ORD-000012',
       'USR-000009',
       session,
+      ['FABRIC_SALE'],
     );
     expect(orderModel).not.toHaveBeenCalled();
     expect(orderItemModel).not.toHaveBeenCalled();
@@ -1027,6 +1048,7 @@ describe('OrdersService', () => {
       'ORD-000007',
       'USR-000001',
       session,
+      ['TAILORING_ATTACHED'],
     );
     expect(session.abortTransaction).toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
@@ -1247,5 +1269,45 @@ describe('OrdersService', () => {
       new BadRequestException('Order status cannot transition from DRAFT to DELIVERED'),
     );
     expect(save).not.toHaveBeenCalled();
+    expect(auditLogsService.record).not.toHaveBeenCalled();
+  });
+
+  it('audits order status changes in the same transaction', async () => {
+    const { order, save } = createOrderDocument({ status: OrderStatus.DRAFT });
+    orderModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(order) });
+
+    await service.updateOrderStatus('ORD-000007', OrderStatus.CONFIRMED, 'USR-000010');
+
+    expect(save).toHaveBeenCalledWith({ session });
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.STATUS_CHANGED,
+        entityType: AuditEntityType.ORDER,
+        entityId: 'ORD-000007',
+        metadata: { from: OrderStatus.DRAFT, to: OrderStatus.CONFIRMED },
+      }),
+      session,
+    );
+    expect(session.commitTransaction).toHaveBeenCalled();
+  });
+
+  it('rolls back order creation when the audit write fails', async () => {
+    mockCustomerExists();
+    mockMeasurement();
+    servicesService.findActiveByIds.mockResolvedValue([]);
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 7 }),
+    });
+    const { order } = createOrderDocument();
+    const { item } = createOrderItemDocument();
+    orderModel.mockImplementation((data: Record<string, unknown>) => Object.assign(order, data));
+    orderItemModel.mockImplementation((data: Record<string, unknown>) => Object.assign(item, data));
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(service.createOrder(validDto(), 'USR-000001')).rejects.toThrow(
+      'Unable to create order',
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrderItem, OrderItemSchema } from './schemas/order-item.schema';
 import { Order, OrderSchema } from './schemas/order.schema';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     FabricsModule,
     GarmentTypesModule,
     ServicesModule,
+    AuditLogsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

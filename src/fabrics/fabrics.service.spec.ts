@@ -9,6 +9,8 @@ import { FabricType } from './enums/fabric-type.enum';
 import { QuantityUnit } from './enums/quantity-unit.enum';
 import type { FabricDocument } from './schemas/fabric.schema';
 import { FabricsService } from './fabrics.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -35,6 +37,7 @@ describe('FabricsService', () => {
     findOneAndDelete: jest.Mock;
   };
   let counterModel: { findOneAndUpdate: jest.Mock };
+  let auditLogsService: { record: jest.Mock };
   let service: FabricsService;
 
   const validDto = () => ({
@@ -92,10 +95,12 @@ describe('FabricsService', () => {
       findOneAndDelete: jest.fn(),
     });
     counterModel = { findOneAndUpdate: jest.fn() };
+    auditLogsService = { record: jest.fn().mockResolvedValue(undefined) };
     service = new FabricsService(
       connection as unknown as Connection,
       fabricModel as unknown as Model<FabricDocument>,
       counterModel as unknown as Model<CounterDocument>,
+      auditLogsService as never,
     );
   });
 
@@ -132,6 +137,16 @@ describe('FabricsService', () => {
     expect(session.commitTransaction).toHaveBeenCalled();
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.CREATED,
+        entityType: AuditEntityType.FABRIC,
+        entityId: 'FAB-000007',
+        metadata: expect.objectContaining({ quantityDelta: 10.5, unit: QuantityUnit.METER }),
+      }),
+      session,
+    );
     expect(result.fabricId).toBe('FAB-000007');
   });
 
@@ -148,6 +163,21 @@ describe('FabricsService', () => {
       ),
     ).rejects.toThrow(new BadRequestException(message));
     expect(connection.startSession).not.toHaveBeenCalled();
+  });
+
+  it('rolls back fabric creation when the audit write fails', async () => {
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 7 }),
+    });
+    const { fabric } = createFabricDocument();
+    fabricModel.mockImplementation((data: Record<string, unknown>) => Object.assign(fabric, data));
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(service.create(validDto(), 'USR-000009')).rejects.toThrow(
+      'Unable to create fabric',
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
   });
 
   it('returns all fabrics with default sorting and pagination', async () => {
@@ -240,13 +270,22 @@ describe('FabricsService', () => {
 
     const result = await service.update('FAB-000007', update, 'USR-000010');
 
-    expect(save).toHaveBeenCalledWith();
+    expect(save).toHaveBeenCalledWith({ session });
     expect(result).toMatchObject({
       ...update,
       fabricId: 'FAB-000007',
       createdBy: 'USR-000001',
       updatedBy: 'USR-000010',
     });
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.UPDATED,
+        entityType: AuditEntityType.FABRIC,
+        entityId: 'FAB-000007',
+        metadata: expect.objectContaining({ quantityDelta: -6.5 }),
+      }),
+      session,
+    );
   });
 
   it('deletes a fabric by ID', async () => {
@@ -281,7 +320,14 @@ describe('FabricsService', () => {
       });
 
       await expect(
-        service.deductStock('FAB-000007', 2.5, 'ORD-000001', 'USR-000011', orderSession),
+        service.deductStock(
+          'FAB-000007',
+          2.5,
+          'ORD-000001',
+          'USR-000011',
+          orderSession,
+          ['TAILORING_ATTACHED'],
+        ),
       ).resolves.toBe(fabric);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledWith(
@@ -297,6 +343,19 @@ describe('FabricsService', () => {
           $set: { updatedBy: 'USR-000011' },
         },
         { new: true, runValidators: true, session: orderSession },
+      );
+      expect(auditLogsService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.UPDATED,
+          entityType: AuditEntityType.FABRIC,
+          entityId: 'FAB-000007',
+          metadata: expect.objectContaining({
+            quantityDelta: -2.5,
+            orderId: 'ORD-000001',
+            usage: ['TAILORING_ATTACHED'],
+          }),
+        }),
+        orderSession,
       );
     });
 
@@ -360,6 +419,7 @@ describe('FabricsService', () => {
       expect(fabricModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
       expect(fallbackQuery.select).toHaveBeenCalledWith('+stockDeductedOrderIds');
       expect(fallbackQuery.session).toHaveBeenCalledWith(orderSession);
+      expect(auditLogsService.record).not.toHaveBeenCalled();
     });
 
     it('reports a missing fabric when the guarded update and fallback lookup miss', async () => {

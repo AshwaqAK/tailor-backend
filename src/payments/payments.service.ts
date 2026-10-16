@@ -17,6 +17,9 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { parsePaymentQueryDate, PaymentQueryDto } from './dto/payment-query.dto';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 export interface PaginatedPayments {
   data: PaymentDocument[];
@@ -52,6 +55,8 @@ export class PaymentsService {
 
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
+
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto, userId: string): Promise<PaymentDocument> {
@@ -158,6 +163,24 @@ export class PaymentsService {
       if (!updatedOrder) {
         throw new ConflictException('Order payment balance changed; retry payment');
       }
+
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.PAYMENT_RECORDED,
+          entityType: AuditEntityType.PAYMENT,
+          entityId: payment.paymentId,
+          metadata: {
+            orderId: payment.orderId,
+            customerId: payment.customerId,
+            amount: payment.amount,
+            paymentMethod: payment.paymentMethod,
+            status: payment.status,
+            orderType: order.orderType ?? 'STANDARD',
+          },
+        },
+        session,
+      );
 
       await session.commitTransaction();
 
@@ -343,6 +366,23 @@ export class PaymentsService {
       if (!updatedOrder) {
         throw new ConflictException('Order payment balance changed; retry refund');
       }
+
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.REFUNDED,
+          entityType: AuditEntityType.REFUND,
+          entityId: refundedPayment.paymentId,
+          metadata: {
+            paymentId: refundedPayment.paymentId,
+            orderId: refundedPayment.orderId,
+            amount: refundedPayment.amount,
+            status: refundedPayment.status,
+            orderType: order.orderType ?? 'STANDARD',
+          },
+        },
+        session,
+      );
 
       await session.commitTransaction();
 

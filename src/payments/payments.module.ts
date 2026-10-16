@@ -8,6 +8,7 @@ import { Counter, CounterSchema } from '../users/schemas/counter.schema';
 import { PaymentsService } from './payments.service';
 import { OrderPaymentsController, PaymentsController } from './payments.controller';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { Payment, PaymentSchema } from './schemas/payment.schema';
       },
     ]),
     AuthTokenModule,
+    AuditLogsModule,
   ],
   controllers: [PaymentsController, OrderPaymentsController],
   providers: [PaymentsService],

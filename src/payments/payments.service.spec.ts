@@ -17,6 +17,8 @@ import { PaymentMethod } from './enums/payment-method.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { PaymentsService } from './payments.service';
 import type { PaymentDocument } from './schemas/payment.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -45,6 +47,7 @@ describe('PaymentsService', () => {
   let counterModel: { findOneAndUpdate: jest.Mock };
   let connection: { startSession: jest.Mock };
   let service: PaymentsService;
+  let auditLogsService: { record: jest.Mock };
 
   const validDto = () => ({
     orderId: 'ORD-000001',
@@ -160,6 +163,7 @@ describe('PaymentsService', () => {
     orderModel = { findOne: jest.fn(), findOneAndUpdate: jest.fn(), exists: jest.fn() };
     customerModel = { exists: jest.fn() };
     counterModel = { findOneAndUpdate: jest.fn() };
+    auditLogsService = { record: jest.fn().mockResolvedValue(undefined) };
     connection = { startSession: jest.fn().mockResolvedValue(session) };
     service = new PaymentsService(
       connection as unknown as Connection,
@@ -167,6 +171,7 @@ describe('PaymentsService', () => {
       orderModel as unknown as Model<OrderDocument>,
       customerModel as unknown as Model<CustomerDocument>,
       counterModel as unknown as Model<CounterDocument>,
+      auditLogsService as never,
     );
   });
 
@@ -226,6 +231,23 @@ describe('PaymentsService', () => {
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
     expect(result).toBe(payment);
+    expect(auditLogsService.record).toHaveBeenCalledTimes(1);
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.PAYMENT_RECORDED,
+        entityType: AuditEntityType.PAYMENT,
+        entityId: 'PAY-000007',
+        metadata: expect.objectContaining({
+          orderId: 'ORD-000001',
+          customerId: 'CUS-000001',
+          amount: 250,
+          paymentMethod: PaymentMethod.UPI,
+          status: PaymentStatus.SUCCESS,
+        }),
+      }),
+      session,
+    );
   });
 
   it('records a full payment with a zero remaining balance', async () => {
@@ -273,6 +295,18 @@ describe('PaymentsService', () => {
       expect.objectContaining({ orderId: 'ORD-000001' }),
       expect.anything(),
       expect.anything(),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.PAYMENT_RECORDED,
+        entityType: AuditEntityType.PAYMENT,
+        entityId: 'PAY-000007',
+        metadata: expect.objectContaining({
+          orderId: 'ORD-000010',
+          orderType: OrderType.ALTERATION,
+        }),
+      }),
+      session,
     );
   });
 
@@ -659,6 +693,21 @@ describe('PaymentsService', () => {
     expect(session.commitTransaction).toHaveBeenCalledTimes(1);
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalledTimes(1);
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000010',
+        action: AuditAction.REFUNDED,
+        entityType: AuditEntityType.REFUND,
+        entityId: 'PAY-000007',
+        metadata: expect.objectContaining({
+          paymentId: 'PAY-000007',
+          orderId: 'ORD-000001',
+          amount: 250,
+          status: PaymentStatus.REFUNDED,
+        }),
+      }),
+      session,
+    );
   });
 
   it('refunds an alteration-bill payment without changing the original garment order', async () => {
@@ -708,6 +757,18 @@ describe('PaymentsService', () => {
       expect.anything(),
       expect.anything(),
     );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.REFUNDED,
+        entityType: AuditEntityType.REFUND,
+        entityId: 'PAY-000007',
+        metadata: expect.objectContaining({
+          orderId: 'ORD-000010',
+          orderType: OrderType.ALTERATION,
+        }),
+      }),
+      session,
+    );
   });
 
   it('rejects a refund when the payment does not exist', async () => {
@@ -732,6 +793,7 @@ describe('PaymentsService', () => {
       );
       expect(orderModel.findOne).not.toHaveBeenCalled();
       expect(orderModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(auditLogsService.record).not.toHaveBeenCalled();
     },
   );
 
@@ -744,6 +806,7 @@ describe('PaymentsService', () => {
     );
     expect(paymentModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(orderModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(auditLogsService.record).not.toHaveBeenCalled();
   });
 
   it.each([0, -25, Number.NaN])(
@@ -771,6 +834,7 @@ describe('PaymentsService', () => {
     );
     expect(paymentModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(orderModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(auditLogsService.record).not.toHaveBeenCalled();
   });
 
   it('rejects refund when its order is missing or no longer matches the customer', async () => {
@@ -820,5 +884,27 @@ describe('PaymentsService', () => {
     expect(session.abortTransaction).toHaveBeenCalledTimes(1);
     expect(session.commitTransaction).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back payment creation when the audit write fails', async () => {
+    mockSuccessfulDependencies();
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(service.create(validDto(), 'USR-000009')).rejects.toThrow(
+      new InternalServerErrorException('Unable to create payment'),
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the refund when the audit write fails', async () => {
+    mockRefundDependencies();
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(service.refund('PAY-000007', 'USR-000010')).rejects.toThrow(
+      new InternalServerErrorException('Unable to refund payment'),
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
   });
 });

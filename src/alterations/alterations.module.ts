@@ -9,6 +9,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { AlterationsController } from './alterations.controller';
 import { AlterationsService } from './alterations.service';
 import { Alteration, AlterationSchema } from './schemas/alteration.schema';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Alteration, AlterationSchema } from './schemas/alteration.schema';
       { name: Counter.name, schema: CounterSchema },
     ]),
     AuthTokenModule,
+    AuditLogsModule,
   ],
   controllers: [AlterationsController],
   providers: [AlterationsService],

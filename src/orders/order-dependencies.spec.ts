@@ -65,6 +65,7 @@ describe('Order dependency validation', () => {
       {} as Connection,
       fabricModel as unknown as Model<FabricDocument>,
       {} as Model<CounterDocument>,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
 
     await expect(
@@ -108,6 +109,7 @@ describe('Order dependency validation', () => {
       {} as Connection,
       fabricModel as unknown as Model<FabricDocument>,
       {} as Model<CounterDocument>,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
 
     await expect(
