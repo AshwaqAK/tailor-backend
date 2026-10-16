@@ -7,6 +7,8 @@ import { Gender } from './enums/gender.enum';
 import type { CustomerDocument } from './schemas/customer.schema';
 import { CustomersService } from './customers.service';
 import { CounterDocument } from '../users/schemas/counter.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -36,6 +38,7 @@ describe('CustomersService', () => {
     findByIdAndUpdate: jest.Mock;
   };
   let counterModel: { findOneAndUpdate: jest.Mock };
+  let auditLogsService: { record: jest.Mock };
   let service: CustomersService;
 
   const createCustomerDocument = (overrides: Partial<CustomerDocument> = {}) => {
@@ -78,10 +81,12 @@ describe('CustomersService', () => {
       findByIdAndUpdate: jest.fn(),
     });
     counterModel = { findOneAndUpdate: jest.fn() };
+    auditLogsService = { record: jest.fn().mockResolvedValue(undefined) };
     service = new CustomersService(
       connection as unknown as Connection,
       customerModel as unknown as Model<CustomerDocument>,
       counterModel as unknown as Model<CounterDocument>,
+      auditLogsService as never,
     );
   });
 
@@ -129,6 +134,15 @@ describe('CustomersService', () => {
     expect(save).toHaveBeenCalledWith({ session });
     expect(session.commitTransaction).toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalled();
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.CREATED,
+        entityType: AuditEntityType.CUSTOMER,
+        entityId: 'CUS-000042',
+      }),
+      session,
+    );
     expect(result.customerId).toBe('CUS-000042');
   });
 
@@ -232,7 +246,16 @@ describe('CustomersService', () => {
     expect(customerModel.findByIdAndUpdate).toHaveBeenCalledWith(
       objectId,
       { name: 'Updated Customer', phone: '+919999999999', updatedBy: 'USR-000010' },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.UPDATED,
+        entityType: AuditEntityType.CUSTOMER,
+        entityId: 'CUS-000001',
+        metadata: { changedFields: ['name', 'phone'] },
+      }),
+      session,
     );
   });
 
@@ -247,7 +270,16 @@ describe('CustomersService', () => {
     expect(customerModel.findByIdAndUpdate).toHaveBeenCalledWith(
       objectId,
       { isActive: false, updatedBy: 'USR-000011' },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.STATUS_CHANGED,
+        entityType: AuditEntityType.CUSTOMER,
+        entityId: 'CUS-000001',
+        metadata: { changedFields: ['isActive'], isActive: false },
+      }),
+      session,
     );
     expect(result.isActive).toBe(false);
   });
@@ -272,7 +304,16 @@ describe('CustomersService', () => {
     expect(customerModel.findByIdAndUpdate).toHaveBeenCalledWith(
       objectId,
       { isActive: true, updatedBy: 'USR-000011' },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.STATUS_CHANGED,
+        entityType: AuditEntityType.CUSTOMER,
+        entityId: 'CUS-000001',
+        metadata: { changedFields: ['isActive'], isActive: true },
+      }),
+      session,
     );
     expect(result.isActive).toBe(true);
   });
@@ -288,5 +329,28 @@ describe('CustomersService', () => {
       new ConflictException('An active customer with this phone number already exists'),
     );
     expect(customerModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(auditLogsService.record).not.toHaveBeenCalled();
+  });
+
+  it('rolls back a customer creation when the audit write fails', async () => {
+    customerModel.findOne.mockReturnValue({
+      lean: () => ({ exec: jest.fn().mockResolvedValue(null) }),
+    });
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 42 }),
+    });
+    const { customer } = createCustomerDocument({ customerId: 'CUS-000042' });
+    customerModel.mockImplementation((data: Record<string, unknown>) => Object.assign(customer, data));
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+    session.inTransaction.mockReturnValue(true);
+
+    await expect(
+      service.createCustomer(
+        { name: 'Customer One', phone: '9876543210', gender: Gender.FEMALE },
+        'USR-000009',
+      ),
+    ).rejects.toThrow('audit unavailable');
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
   });
 });

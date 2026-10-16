@@ -20,6 +20,9 @@ import { OrderItem, OrderItemDocument } from '../orders/schemas/order-item.schem
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { OrderType } from '../orders/enums/order-type.enum';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 export interface PaginatedAlterations {
   data: AlterationDocument[];
@@ -59,6 +62,8 @@ export class AlterationsService {
 
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
+
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async create(dto: CreateAlterationDto, userId: string): Promise<AlterationDocument> {
@@ -83,6 +88,18 @@ export class AlterationsService {
       });
 
       await alteration.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.ALTERATION,
+          entityId: alteration.alterationId,
+          metadata: {
+            changedFields: ['customerId', 'originalOrderId', 'originalOrderItemId', 'description', 'notes', 'charge'],
+          },
+        },
+        session,
+      );
       await session.commitTransaction();
 
       return alteration;
@@ -155,8 +172,15 @@ export class AlterationsService {
     dto: UpdateAlterationDto,
     userId: string,
   ): Promise<AlterationDocument> {
+    const session = await this.connection.startSession();
+
     try {
-      const alteration = await this.findOne(alterationId);
+      session.startTransaction();
+      const alterationQuery = this.alterationModel.findOne({ alterationId });
+      const alteration = await this.withSession(alterationQuery, session).exec();
+
+      if (!alteration) throw new NotFoundException('Alteration not found');
+      const previousStatus = alteration.status;
 
       if (dto.status !== undefined) {
         this.validateStatusTransition(alteration.status, dto.status);
@@ -178,9 +202,30 @@ export class AlterationsService {
       }
 
       alteration.updatedBy = userId;
-      return await alteration.save();
+      const updatedAlteration = await alteration.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: dto.status !== undefined ? AuditAction.STATUS_CHANGED : AuditAction.UPDATED,
+          entityType: AuditEntityType.ALTERATION,
+          entityId: updatedAlteration.alterationId,
+          metadata: {
+            changedFields: Object.keys(dto),
+            ...(dto.status !== undefined
+              ? { from: previousStatus, to: dto.status }
+              : {}),
+            ...(dto.charge !== undefined ? { chargeChanged: true } : {}),
+          },
+        },
+        session,
+      );
+      await session.commitTransaction();
+      return updatedAlteration;
     } catch (error) {
+      if (session.inTransaction()) await session.abortTransaction();
       this.rethrowServiceError(error, 'update');
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -257,6 +302,21 @@ export class AlterationsService {
       if (!billedAlteration) {
         throw new ConflictException('Alteration billing state changed; retry billing');
       }
+
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.BILL_CREATED,
+          entityType: AuditEntityType.ALTERATION_BILL,
+          entityId: bill.orderId,
+          metadata: {
+            orderType: OrderType.ALTERATION,
+            sourceAlterationId: alteration.alterationId,
+            originalOrderId: alteration.originalOrderId,
+          },
+        },
+        session,
+      );
 
       await session.commitTransaction();
       return bill;
@@ -368,6 +428,13 @@ export class AlterationsService {
     }
 
     return `ORD-${String(counter.sequence).padStart(6, '0')}`;
+  }
+
+  private withSession<T extends { session?: (session: ClientSession) => T }>(
+    query: T,
+    session: ClientSession,
+  ): T {
+    return typeof query.session === 'function' ? query.session(session) : query;
   }
 
   private validateStatusTransition(

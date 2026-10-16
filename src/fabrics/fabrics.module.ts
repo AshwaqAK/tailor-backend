@@ -6,6 +6,7 @@ import { Counter, CounterSchema } from '../users/schemas/counter.schema';
 import { FabricsController } from './fabrics.controller';
 import { FabricsService } from './fabrics.service';
 import { Fabric, FabricSchema } from './schemas/fabric.schema';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Fabric, FabricSchema } from './schemas/fabric.schema';
       },
     ]),
     AuthTokenModule,
+    AuditLogsModule,
   ],
   controllers: [FabricsController],
   providers: [FabricsService],

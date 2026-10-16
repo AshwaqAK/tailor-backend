@@ -13,6 +13,8 @@ import { UpdateAlterationDto } from './dto/update-alteration.dto';
 import { AlterationStatus } from './enums/alteration-status.enum';
 import type { AlterationDocument } from './schemas/alteration.schema';
 import { AlterationsService } from './alterations.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 jest.mock('@nestjs/mongoose', () => ({
   InjectConnection: () => () => undefined,
@@ -40,6 +42,7 @@ describe('AlterationsService', () => {
   let orderModel: jest.Mock & { findOne: jest.Mock };
   let orderItemModel: { findOne: jest.Mock };
   let counterModel: { findOneAndUpdate: jest.Mock };
+  let auditLogsService: { record: jest.Mock };
   let service: AlterationsService;
 
   const validDto = (): CreateAlterationDto => ({
@@ -109,6 +112,7 @@ describe('AlterationsService', () => {
     orderModel = Object.assign(jest.fn(), { findOne: jest.fn() });
     orderItemModel = { findOne: jest.fn() };
     counterModel = { findOneAndUpdate: jest.fn() };
+    auditLogsService = { record: jest.fn().mockResolvedValue(undefined) };
     service = new AlterationsService(
       { startSession: jest.fn().mockResolvedValue(session) } as unknown as Connection,
       alterationModel as unknown as Model<AlterationDocument>,
@@ -116,6 +120,7 @@ describe('AlterationsService', () => {
       orderModel as unknown as Model<OrderDocument>,
       orderItemModel as unknown as Model<OrderItemDocument>,
       counterModel as unknown as Model<CounterDocument>,
+      auditLogsService as never,
     );
   });
 
@@ -145,6 +150,18 @@ describe('AlterationsService', () => {
     );
     expect(save).toHaveBeenCalledWith({ session });
     expect(session.commitTransaction).toHaveBeenCalled();
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.CREATED,
+        entityType: AuditEntityType.ALTERATION,
+        entityId: 'ALT-000007',
+        metadata: expect.objectContaining({
+          changedFields: expect.arrayContaining(['description', 'charge']),
+        }),
+      }),
+      session,
+    );
     expect(result.alterationId).toBe('ALT-000007');
   });
 
@@ -177,6 +194,22 @@ describe('AlterationsService', () => {
       BadRequestException,
     );
     expect(alterationModel).not.toHaveBeenCalled();
+  });
+
+  it('rolls back alteration creation when the audit write fails', async () => {
+    mockValidReferences();
+    counterModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ sequence: 7 }),
+    });
+    const { alteration } = makeAlteration();
+    alterationModel.mockImplementation((data: Record<string, unknown>) => Object.assign(alteration, data));
+    auditLogsService.record.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(service.create(validDto(), 'USR-000009')).rejects.toThrow(
+      'Unable to create alteration',
+    );
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
   });
 
   it('lists with filters and retrieves by alteration ID', async () => {
@@ -222,6 +255,15 @@ describe('AlterationsService', () => {
     expect(alteration.completionDate).toEqual(expect.any(Date));
     expect(alteration.updatedBy).toBe('USR-000009');
     expect(save).toHaveBeenCalled();
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.STATUS_CHANGED,
+        entityType: AuditEntityType.ALTERATION,
+        entityId: 'ALT-000007',
+        metadata: { changedFields: ['status', 'notes'], from: AlterationStatus.IN_PROGRESS, to: AlterationStatus.COMPLETED },
+      }),
+      session,
+    );
 
     const completed = makeAlteration({ status: AlterationStatus.COMPLETED }).alteration;
     alterationModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(completed) });
@@ -329,6 +371,20 @@ describe('AlterationsService', () => {
       status: 'CONFIRMED',
       balanceAmount: 125,
     });
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'USR-000009',
+        action: AuditAction.BILL_CREATED,
+        entityType: AuditEntityType.ALTERATION_BILL,
+        entityId: 'ORD-000009',
+        metadata: {
+          orderType: 'ALTERATION',
+          sourceAlterationId: 'ALT-000007',
+          originalOrderId: 'ORD-000001',
+        },
+      }),
+      session,
+    );
     expect(session.commitTransaction).toHaveBeenCalled();
   });
 

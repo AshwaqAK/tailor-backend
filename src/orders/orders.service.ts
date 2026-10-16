@@ -10,7 +10,7 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model } from 'mongoose';
 
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
-import { FabricsService } from '../fabrics/fabrics.service';
+import { FabricStockUsage, FabricsService } from '../fabrics/fabrics.service';
 import { QuantityUnit } from '../fabrics/enums/quantity-unit.enum';
 import type { FabricDocument } from '../fabrics/schemas/fabric.schema';
 import { GarmentType, GarmentTypeDocument } from '../garment-types/schemas/garment-type.schema';
@@ -28,6 +28,9 @@ import { OrderPaymentStatus } from './enums/order-payment-status.enum';
 import { OrderStatus } from './enums/order-status.enum';
 import { OrderItem, OrderItemDocument } from './schemas/order-item.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 export interface OrderWithItems {
   order: OrderDocument;
@@ -96,6 +99,8 @@ export class OrdersService {
     private readonly fabricsService: FabricsService,
     private readonly servicesService: ServicesService,
     private readonly garmentTypePricingService: GarmentTypePricingService,
+
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async previewPricing(dto: PricingPreviewDto): Promise<PricingPreviewResult> {
@@ -181,6 +186,7 @@ export class OrdersService {
 
       const orderId = await this.generateOrderId(session);
       const fabricQuantities = new Map<string, number>();
+      const fabricUsage = new Map<string, Set<FabricStockUsage>>();
 
       for (const item of createOrderDto.items) {
         if (this.isFabricSaleItem(item)) {
@@ -189,6 +195,7 @@ export class OrdersService {
           }
 
           this.addFabricQuantity(fabricQuantities, item.fabricId, item.quantity);
+          this.addFabricUsage(fabricUsage, item.fabricId, 'FABRIC_SALE');
           continue;
         }
 
@@ -209,6 +216,7 @@ export class OrdersService {
 
         const currentQuantity = fabricQuantities.get(item.fabricId) ?? 0;
         fabricQuantities.set(item.fabricId, currentQuantity + item.fabricQuantity);
+        this.addFabricUsage(fabricUsage, item.fabricId, 'TAILORING_ATTACHED');
       }
 
       const fabricsById = new Map<string, FabricDocument>();
@@ -220,6 +228,7 @@ export class OrdersService {
           orderId,
           userId,
           session,
+          [...(fabricUsage.get(fabricId) ?? [])],
         );
 
         for (const item of createOrderDto.items) {
@@ -382,6 +391,20 @@ export class OrdersService {
         await orderItem.save({ session });
       }
 
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.ORDER,
+          entityId: order.orderId,
+          metadata: {
+            changedFields: ['customerId', 'orderType', 'totalAmount'],
+            orderType: order.orderType ?? 'STANDARD',
+          },
+        },
+        session,
+      );
+
       await session.commitTransaction();
 
       return {
@@ -524,24 +547,49 @@ export class OrdersService {
     status: OrderStatus,
     userId: string,
   ): Promise<OrderDocument> {
-    const order = await this.orderModel.findOne({ orderId }).exec();
+    const session = await this.connection.startSession();
 
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
+    try {
+      session.startTransaction();
+      const orderQuery = this.orderModel.findOne({ orderId });
+      const order = await this.withSession(orderQuery, session).exec();
 
-    const allowedStatuses = this.allowedStatusTransitions[order.status];
+      if (!order) throw new NotFoundException('Order not found');
 
-    if (!allowedStatuses.includes(status)) {
-      throw new BadRequestException(
-        `Order status cannot transition from ${order.status} to ${status}`,
+      const previousStatus = order.status;
+      const allowedStatuses = this.allowedStatusTransitions[previousStatus];
+
+      if (!allowedStatuses.includes(status)) {
+        throw new BadRequestException(
+          `Order status cannot transition from ${previousStatus} to ${status}`,
+        );
+      }
+
+      order.status = status;
+      order.updatedBy = userId;
+      await order.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.STATUS_CHANGED,
+          entityType: AuditEntityType.ORDER,
+          entityId: order.orderId,
+          metadata: { from: previousStatus, to: status },
+        },
+        session,
       );
+      await session.commitTransaction();
+      return order;
+    } catch (error) {
+      if (session.inTransaction()) await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
     }
+  }
 
-    order.status = status;
-    order.updatedBy = userId;
-
-    return order.save();
+  private withSession<T extends { session?: (session: ClientSession) => T }>(query: T, session: ClientSession): T {
+    return typeof query.session === 'function' ? query.session(session) : query;
   }
 
   private calculateServiceLineAmount(price: number, quantity: number): number {
@@ -609,6 +657,16 @@ export class OrdersService {
 
     const currentQuantity = fabricQuantities.get(fabricId) ?? 0;
     fabricQuantities.set(fabricId, currentQuantity + quantity);
+  }
+
+  private addFabricUsage(
+    usageByFabric: Map<string, Set<FabricStockUsage>>,
+    fabricId: string,
+    usage: FabricStockUsage,
+  ): void {
+    const usages = usageByFabric.get(fabricId) ?? new Set<FabricStockUsage>();
+    usages.add(usage);
+    usageByFabric.set(fabricId, usages);
   }
 
   private isFabricSaleItem(item: { itemType?: string }): boolean {

@@ -16,6 +16,11 @@ import { UpdateFabricDto } from './dto/update-fabric.dto';
 import { FabricType } from './enums/fabric-type.enum';
 import { QuantityUnit } from './enums/quantity-unit.enum';
 import { Fabric, FabricDocument } from './schemas/fabric.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+
+export type FabricStockUsage = 'TAILORING_ATTACHED' | 'FABRIC_SALE';
 
 export interface PaginatedFabrics {
   data: FabricDocument[];
@@ -38,6 +43,8 @@ export class FabricsService {
 
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
+
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async create(createFabricDto: CreateFabricDto, userId: string): Promise<FabricDocument> {
@@ -57,6 +64,20 @@ export class FabricsService {
       });
 
       await fabric.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.FABRIC,
+          entityId: fabric.fabricId,
+          metadata: {
+            changedFields: ['name', 'type', 'color', 'quantity', 'unit', 'pricePerUnit'],
+            quantityDelta: fabric.quantity,
+            unit: fabric.unit,
+          },
+        },
+        session,
+      );
       await session.commitTransaction();
 
       return fabric;
@@ -159,6 +180,7 @@ export class FabricsService {
     orderId: string,
     userId: string,
     session: ClientSession,
+    usage?: readonly FabricStockUsage[],
   ): Promise<FabricDocument> {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new BadRequestException('Fabric quantity to deduct must be positive');
@@ -187,6 +209,21 @@ export class FabricsService {
         .exec();
 
       if (fabric) {
+        await this.auditLogsService.record(
+          {
+            actorId: userId,
+            action: AuditAction.UPDATED,
+            entityType: AuditEntityType.FABRIC,
+            entityId: fabric.fabricId,
+            metadata: {
+              quantityDelta: -quantity,
+              unit: fabric.unit,
+              orderId,
+              ...(usage?.length ? { usage: [...new Set(usage)] } : {}),
+            },
+          },
+          session,
+        );
         return fabric;
       }
 
@@ -219,10 +256,17 @@ export class FabricsService {
     updateFabricDto: UpdateFabricDto,
     userId: string,
   ): Promise<FabricDocument> {
+    const session = await this.connection.startSession();
+
     try {
       this.validateFabricValues(updateFabricDto);
+      session.startTransaction();
 
-      const fabric = await this.findOne(fabricId);
+      const findQuery = this.fabricModel.findOne({ fabricId });
+      const fabric = await this.withSession(findQuery, session).exec();
+
+      if (!fabric) throw new NotFoundException('Fabric not found');
+      const previousQuantity = fabric.quantity;
 
       if (updateFabricDto.name !== undefined) {
         fabric.name = updateFabricDto.name;
@@ -262,9 +306,32 @@ export class FabricsService {
 
       fabric.updatedBy = userId;
 
-      return await fabric.save();
+      const savedFabric = await fabric.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.UPDATED,
+          entityType: AuditEntityType.FABRIC,
+          entityId: savedFabric.fabricId,
+          metadata: {
+            changedFields: Object.keys(updateFabricDto),
+            ...(updateFabricDto.quantity !== undefined
+              ? {
+                  quantityDelta: updateFabricDto.quantity - previousQuantity,
+                  unit: savedFabric.unit,
+                }
+              : {}),
+          },
+        },
+        session,
+      );
+      await session.commitTransaction();
+      return savedFabric;
     } catch (error) {
+      if (session.inTransaction()) await session.abortTransaction();
       this.rethrowServiceError(error, 'update');
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -342,6 +409,13 @@ export class FabricsService {
 
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private withSession<T extends { session?: (session: ClientSession) => T }>(
+    query: T,
+    session: ClientSession,
+  ): T {
+    return typeof query.session === 'function' ? query.session(session) : query;
   }
 
   private rethrowServiceError(error: unknown, action: string): never {

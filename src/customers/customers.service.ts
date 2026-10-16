@@ -8,6 +8,9 @@ import { CustomerQueryDto } from './dto/customer-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponse } from './types/customer-response.type';
 import { Counter, CounterDocument } from '../users/schemas/counter.schema';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class CustomersService {
@@ -20,6 +23,8 @@ export class CustomersService {
 
     @InjectModel(Counter.name)
     private readonly customerCounterModel: Model<CounterDocument>,
+
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async createCustomer(
@@ -59,6 +64,18 @@ export class CustomersService {
       });
 
       await customer.save({ session });
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.CUSTOMER,
+          entityId: customer.customerId,
+          metadata: {
+            changedFields: ['name', 'phone', 'alternatePhone', 'email', 'gender', 'photo', 'notes'],
+          },
+        },
+        session,
+      );
       await session.commitTransaction();
 
       return this.toCustomerResponse(customer);
@@ -206,40 +223,41 @@ export class CustomersService {
       updateData.alternatePhone = this.normalizeIndianPhone(updateCustomerDto.alternatePhone);
     }
 
-    const customer = await this.customerModel
-      .findByIdAndUpdate(id, updateData, {
+    const session = await this.connection.startSession();
+
+    try {
+      session.startTransaction();
+      const updateQuery = this.customerModel.findByIdAndUpdate(id, updateData, {
         new: true,
         runValidators: true,
-      })
-      .exec();
+        session,
+      });
+      const customer = await this.withSession(updateQuery, session).exec();
 
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
+      if (!customer) throw new NotFoundException('Customer not found');
+
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.UPDATED,
+          entityType: AuditEntityType.CUSTOMER,
+          entityId: customer.customerId,
+          metadata: { changedFields: Object.keys(updateCustomerDto) },
+        },
+        session,
+      );
+      await session.commitTransaction();
+      return this.toCustomerResponse(customer);
+    } catch (error) {
+      if (session.inTransaction()) await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
     }
-
-    return this.toCustomerResponse(customer);
   }
 
   async deactivateCustomer(id: string, userId: string): Promise<CustomerResponse> {
-    const customer = await this.customerModel
-      .findByIdAndUpdate(
-        id,
-        {
-          isActive: false,
-          updatedBy: userId,
-        },
-        {
-          new: true,
-          runValidators: true,
-        },
-      )
-      .exec();
-
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
-    return this.toCustomerResponse(customer);
+    return this.updateCustomerStatus(id, false, userId);
   }
 
   async activateCustomer(id: string, userId: string): Promise<CustomerResponse> {
@@ -262,25 +280,49 @@ export class CustomersService {
       throw new ConflictException('An active customer with this phone number already exists');
     }
 
-    const activatedCustomer = await this.customerModel
-      .findByIdAndUpdate(
+    return this.updateCustomerStatus(id, true, userId);
+  }
+
+  private async updateCustomerStatus(
+    id: string,
+    isActive: boolean,
+    userId: string,
+  ): Promise<CustomerResponse> {
+    const session = await this.connection.startSession();
+
+    try {
+      session.startTransaction();
+      const updateQuery = this.customerModel.findByIdAndUpdate(
         id,
-        {
-          isActive: true,
-          updatedBy: userId,
-        },
-        {
-          new: true,
-          runValidators: true,
-        },
-      )
-      .exec();
+        { isActive, updatedBy: userId },
+        { new: true, runValidators: true, session },
+      );
+      const customer = await this.withSession(updateQuery, session).exec();
 
-    if (!activatedCustomer) {
-      throw new NotFoundException('Customer not found');
+      if (!customer) throw new NotFoundException('Customer not found');
+
+      await this.auditLogsService.record(
+        {
+          actorId: userId,
+          action: AuditAction.STATUS_CHANGED,
+          entityType: AuditEntityType.CUSTOMER,
+          entityId: customer.customerId,
+          metadata: { changedFields: ['isActive'], isActive },
+        },
+        session,
+      );
+      await session.commitTransaction();
+      return this.toCustomerResponse(customer);
+    } catch (error) {
+      if (session.inTransaction()) await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
     }
+  }
 
-    return this.toCustomerResponse(activatedCustomer);
+  private withSession<T extends { session?: (session: ClientSession) => T }>(query: T, session: ClientSession): T {
+    return typeof query.session === 'function' ? query.session(session) : query;
   }
 
   private async generateCustomerId(session: ClientSession): Promise<string> {

@@ -6,6 +6,7 @@ import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 import { AuthTokenModule } from '../auth/auth-token.module';
 import { Counter, CounterSchema } from '../users/schemas/counter.schema';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Counter, CounterSchema } from '../users/schemas/counter.schema';
       },
     ]),
     AuthTokenModule,
+    AuditLogsModule,
   ],
   controllers: [CustomersController],
   providers: [CustomersService],
