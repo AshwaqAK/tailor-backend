@@ -8,5 +8,16 @@ services:
     volumes:
       - mongodb_data:/data/db
 
+  backend:
+    build: .
+    container_name: tailor-backend
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+
 volumes:
   mongodb_data:
